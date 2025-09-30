@@ -393,7 +393,7 @@ const HabitTracker = () => {
                     type="date"
                     value={nuevoRegistro.fecha}
                     onChange={(e) => setNuevoRegistro({...nuevoRegistro, fecha: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full p-2 border border-gray-300 rounded-lg"
                   />
                 </div>
                 <div>
@@ -401,27 +401,27 @@ const HabitTracker = () => {
                   <select
                     value={nuevoRegistro.realizado}
                     onChange={(e) => setNuevoRegistro({...nuevoRegistro, realizado: e.target.value === 'true'})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full p-2 border border-gray-300 rounded-lg"
                   >
                     <option value="true">Sí</option>
                     <option value="false">No</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Valor (min/veces)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Valor</label>
                   <input
                     type="number"
                     value={nuevoRegistro.valor}
                     onChange={(e) => setNuevoRegistro({...nuevoRegistro, valor: e.target.value})}
                     disabled={!nuevoRegistro.realizado}
                     placeholder="Ej: 30"
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+                    className="w-full p-2 border border-gray-300 rounded-lg disabled:bg-gray-100"
                   />
                 </div>
                 <div className="flex items-end">
                   <button
                     onClick={agregarRegistro}
-                    className="w-full bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                    className="w-full bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 font-medium"
                   >
                     Agregar
                   </button>
@@ -472,71 +472,9 @@ const HabitTracker = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <h3 className="text-lg font-semibold text-indigo-900 mb-4">📊 Estadísticas</h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center p-3 bg-indigo-50 rounded-lg">
-                        <span className="text-gray-700">Días realizados</span>
-                        <span className="font-bold text-indigo-900">{metricas.diasRealizados} / {metricas.diasTotales}</span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                        <span className="text-gray-700">Tasa de cumplimiento</span>
-                        <span className="font-bold text-green-600">{metricas.tasaCumplimiento}%</span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                        <span className="text-gray-700">Promedio últimos 7 días</span>
-                        <span className="font-bold text-blue-600">{metricas.promedioUltimos7}</span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
-                        <span className="text-gray-700">Valor sugerido mañana</span>
-                        <span className="font-bold text-purple-600">≥ {metricas.valorSugerido}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <h3 className="text-lg font-semibold text-indigo-900 mb-4">💡 Recomendaciones</h3>
-                    <div className="space-y-3">
-                      {metricas.tendencia === 'bajando' && (
-                        <div className="p-3 bg-red-50 border-l-4 border-red-500 rounded">
-                          <p className="text-red-800 font-medium">⚠️ Alerta: Tendencia descendente</p>
-                          <p className="text-sm text-red-600 mt-1">
-                            Intenta llegar al menos a {metricas.valorSugerido} mañana para recuperar el ritmo.
-                          </p>
-                        </div>
-                      )}
-                      {metricas.tendencia === 'subiendo' && (
-                        <div className="p-3 bg-green-50 border-l-4 border-green-500 rounded">
-                          <p className="text-green-800 font-medium">✅ ¡Excelente! Vas en ascenso</p>
-                          <p className="text-sm text-green-600 mt-1">
-                            Mantén el impulso alcanzando {metricas.valorSugerido} o más.
-                          </p>
-                        </div>
-                      )}
-                      {metricas.rachaActual >= 7 && (
-                        <div className="p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded">
-                          <p className="text-yellow-800 font-medium">🔥 ¡Racha de {metricas.rachaActual} días!</p>
-                          <p className="text-sm text-yellow-600 mt-1">
-                            Estás construyendo un hábito sólido. ¡No lo rompas!
-                          </p>
-                        </div>
-                      )}
-                      {parseFloat(metricas.probabilidadCompletar) >= 80 && (
-                        <div className="p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded">
-                          <p className="text-indigo-800 font-medium">🎯 Alta probabilidad de éxito</p>
-                          <p className="text-sm text-indigo-600 mt-1">
-                            Con tu ritmo actual, mantienes {metricas.probabilidadCompletar}% de cumplimiento.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 {datosGrafico.length > 0 && (
                   <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                    <h3 className="text-lg font-semibold text-indigo-900 mb-4">📈 Evolución de {categoriaActual}</h3>
+                    <h3 className="text-lg font-semibold text-indigo-900 mb-4">📈 Evolución</h3>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={datosGrafico}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -549,48 +487,48 @@ const HabitTracker = () => {
                     </ResponsiveContainer>
                   </div>
                 )}
-              </>
-            )}
 
-            {registrosActuales.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-indigo-900 mb-4">📋 Historial: {categoriaActual}</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b-2 border-indigo-200">
-                        <th className="text-left p-3 text-indigo-900">Fecha</th>
-                        <th className="text-left p-3 text-indigo-900">¿Realizado?</th>
-                        <th className="text-left p-3 text-indigo-900">Valor</th>
-                        <th className="text-left p-3 text-indigo-900">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...registrosActuales].reverse().map((registro) => (
-                        <tr key={registro.id} className="border-b border-gray-200 hover:bg-indigo-50">
-                          <td className="p-3">{new Date(registro.fecha).toLocaleDateString('es-ES')}</td>
-                          <td className="p-3">
-                            <span className<span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              registro.realizado ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {registro.realizado ? '✓ Sí' : '✗ No'}
-                            </span>
-                          </td>
-                          <td className="p-3 font-medium">{registro.valor}</td>
-                          <td className="p-3">
-                            <button
-                              onClick={() => eliminarRegistro(registro.id)}
-                              className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                {registrosActuales.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <h3 className="text-lg font-semibold text-indigo-900 mb-4">📋 Historial</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b-2 border-indigo-200">
+                            <th className="text-left p-3">Fecha</th>
+                            <th className="text-left p-3">¿Realizado?</th>
+                            <th className="text-left p-3">Valor</th>
+                            <th className="text-left p-3">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...registrosActuales].reverse().map((registro) => (
+                            <tr key={registro.id} className="border-b hover:bg-indigo-50">
+                              <td className="p-3">{new Date(registro.fecha).toLocaleDateString('es-ES')}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  registro.realizado ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {registro.realizado ? '✓ Sí' : '✗ No'}
+                                </span>
+                              </td>
+                              <td className="p-3 font-medium">{registro.valor}</td>
+                              <td className="p-3">
+                                <button
+                                  onClick={() => eliminarRegistro(registro.id)}
+                                  className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                >
+                                  Eliminar
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -599,9 +537,6 @@ const HabitTracker = () => {
           <div className="bg-white rounded-lg shadow-lg p-12 text-center">
             <p className="text-gray-500 text-lg">
               👋 ¡Bienvenido! Crea tu primera categoría para comenzar
-            </p>
-            <p className="text-gray-400 text-sm mt-2">
-              Ejemplos: Inglés, Gimnasio, Meditación, Lectura, etc.
             </p>
           </div>
         )}

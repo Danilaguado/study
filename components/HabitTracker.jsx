@@ -566,4 +566,48 @@ const HabitTracker = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...registrosAct
+               {[...registrosActuales].reverse().map((registro) => (
+                        <tr key={registro.id} className="border-b border-gray-200 hover:bg-indigo-50">
+                          <td className="p-3">{new Date(registro.fecha).toLocaleDateString('es-ES')}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              registro.realizado ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {registro.realizado ? '✓ Sí' : '✗ No'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-medium">{registro.valor}</td>
+                          <td className="p-3">
+                            <button
+                              onClick={() => eliminarRegistro(registro.id)}
+                              className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {!categoriaActual && categorias.length === 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+            <p className="text-gray-500 text-lg">
+              👋 ¡Bienvenido! Crea tu primera categoría para comenzar
+            </p>
+            <p className="text-gray-400 text-sm mt-2">
+              Ejemplos: Inglés, Gimnasio, Meditación, Lectura, etc.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default HabitTracker;

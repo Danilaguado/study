@@ -9,10 +9,10 @@ const StudyTracker = () => {
   const [registros, setRegistros] = useState({});
   const [mostrarNuevaCategoria, setMostrarNuevaCategoria] = useState(false);
   const [nuevaCategoria, setNuevaCategoria] = useState('');
-  const [registroAbierto, setRegistroAbierto] = useState(true);
+  const [registroAbierto, setRegistroAbierto] = useState(false);
   const [diasTendencia, setDiasTendencia] = useState(7);
   const [mostrarPomodoro, setMostrarPomodoro] = useState(false);
-  const [tiempoPomodoro] = useState(1200);
+  const [tiempoPomodoro] = useState(1800);
   const [tiempoPausa] = useState(600);
   const [tiempoActual, setTiempoActual] = useState(1200);
   const [enPausa, setEnPausa] = useState(false);
@@ -87,7 +87,7 @@ const StudyTracker = () => {
     setMostrarPomodoro(true);
     setPomodoroActivo(true);
     setEnPausa(false);
-    setTiempoActual(tiempoPomodoro);
+    setTiempoActual(1800);
     setCicloPomodoro(1);
     setMinutosAcumulados(0);
     setHoraInicioPomodoro(new Date().getHours());
@@ -422,53 +422,53 @@ const StudyTracker = () => {
         <p className="text-center text-gray-600 mb-8">Analiza tus hábitos de estudio</p>
 
         {mostrarPomodoro && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-8 max-w-md w-full">
+          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-12 max-w-2xl w-full shadow-2xl">
               {!pomodoroActivo && cicloPomodoro > totalCiclos ? (
                 <div className="text-center">
-                  <h2 className="text-3xl font-bold text-green-600 mb-4">🎉 ¡Felicitaciones!</h2>
-                  <p className="text-xl mb-4">Completaste {totalCiclos} ciclos</p>
-                  <p className="text-2xl font-bold text-indigo-900 mb-6">
+                  <h2 className="text-5xl font-bold text-green-600 mb-6">🎉 ¡Felicitaciones!</h2>
+                  <p className="text-2xl mb-6">Completaste {totalCiclos} ciclos</p>
+                  <p className="text-4xl font-bold text-indigo-900 mb-8">
                     {Math.round(minutosAcumulados)} minutos
                   </p>
-                  <div className="flex gap-3">
+                  <div className="flex gap-4">
                     <button
                       onClick={registrarEstudioPomodoro}
-                      className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium"
+                      className="flex-1 bg-green-600 text-white px-8 py-4 rounded-xl hover:bg-green-700 font-bold text-lg"
                     >
                       Registrar
                     </button>
                     <button
                       onClick={() => {
                         setCicloPomodoro(1);
-                        setTiempoActual(tiempoPomodoro);
+                        setTiempoActual(1800);
                         setPomodoroActivo(true);
                         setEnPausa(false);
                       }}
-                      className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-medium"
+                      className="flex-1 bg-indigo-600 text-white px-8 py-4 rounded-xl hover:bg-indigo-700 font-bold text-lg"
                     >
-                      Otro
+                      Otro Pomodoro
                     </button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <h2 className="text-2xl font-bold text-indigo-900 mb-4 text-center">
+                  <h2 className="text-4xl font-bold text-indigo-900 mb-6 text-center">
                     {enPausa ? '⏸️ PAUSA' : '⏱️ Pomodoro'}
                   </h2>
-                  <p className="text-center text-gray-600 mb-2">
+                  <p className="text-center text-gray-600 mb-4 text-xl">
                     Ciclo {cicloPomodoro} / {totalCiclos}
                   </p>
-                  <div className="text-6xl font-bold text-center text-indigo-900 mb-6">
+                  <div className="text-8xl font-bold text-center text-indigo-900 mb-8">
                     {formatearTiempo(tiempoActual)}
                   </div>
-                  <div className="flex gap-3 mb-4">
+                  <div className="flex gap-4 mb-6">
                     <button
                       onClick={pausarReanudarPomodoro}
                       disabled={enPausa}
-                      className="flex-1 bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 font-medium flex items-center justify-center gap-2 disabled:bg-gray-400"
+                      className="flex-1 bg-yellow-500 text-white px-8 py-4 rounded-xl hover:bg-yellow-600 font-bold text-lg flex items-center justify-center gap-3 disabled:bg-gray-400"
                     >
-                      <Pause size={20} />
+                      <Pause size={24} />
                       Pausa
                     </button>
                     <button
@@ -478,13 +478,13 @@ const StudyTracker = () => {
                         setEnPausa(false);
                         if (intervaloRef.current) clearInterval(intervaloRef.current);
                       }}
-                      className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center justify-center gap-2"
+                      className="flex-1 bg-red-600 text-white px-8 py-4 rounded-xl hover:bg-red-700 font-bold text-lg flex items-center justify-center gap-3"
                     >
-                      <Square size={20} />
+                      <Square size={24} />
                       Detener
                     </button>
                   </div>
-                  <p className="text-center text-sm text-gray-600">
+                  <p className="text-center text-lg text-gray-600">
                     Acumulado: {Math.round(minutosAcumulados)} min
                   </p>
                 </>
@@ -596,7 +596,7 @@ const StudyTracker = () => {
                 className="w-full bg-indigo-600 text-white px-6 py-4 rounded-lg hover:bg-indigo-700 font-bold text-lg flex items-center justify-center gap-3"
               >
                 <Play size={24} />
-                Pomodoro (2 × 20 min)
+                Pomodoro (2 × 30 min)
               </button>
             </div>
 

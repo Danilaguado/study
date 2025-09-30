@@ -14,5 +14,10 @@
     "recharts": "2.10.3",
     "lucide-react": "0.263.1",
     "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.0",
+    "postcss": "8.4.32",
+    "autoprefixer": "10.4.16"
   }
 }

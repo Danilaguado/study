@@ -1,20 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, Calendar, Target, Award, Download, Upload, Plus, X, FolderOpen } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Calendar, Target, Award, Download, Upload, Plus, X, FolderOpen, ChevronDown, ChevronUp, Play, Pause, Square, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const HabitTracker = () => {
+const StudyTracker = () => {
   const [categorias, setCategorias] = useState([]);
   const [categoriaActual, setCategoriaActual] = useState(null);
   const [registros, setRegistros] = useState({});
   const [mostrarNuevaCategoria, setMostrarNuevaCategoria] = useState(false);
   const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const [registroAbierto, setRegistroAbierto] = useState(true);
+  const [diasTendencia, setDiasTendencia] = useState(7);
+  const [mostrarPomodoro, setMostrarPomodoro] = useState(false);
+  const [tiempoPomodoro] = useState(1200);
+  const [tiempoPausa] = useState(600);
+  const [tiempoActual, setTiempoActual] = useState(1200);
+  const [enPausa, setEnPausa] = useState(false);
+  const [pomodoroActivo, setPomodoroActivo] = useState(false);
+  const [cicloPomodoro, setCicloPomodoro] = useState(1);
+  const [totalCiclos] = useState(2);
+  const [minutosAcumulados, setMinutosAcumulados] = useState(0);
+  const [horaInicioPomodoro, setHoraInicioPomodoro] = useState(null);
   const [nuevoRegistro, setNuevoRegistro] = useState({
     fecha: new Date().toISOString().split('T')[0],
     realizado: true,
     valor: ''
   });
   const fileInputRef = useRef(null);
+  const intervaloRef = useRef(null);
 
   useEffect(() => {
     const categoriasGuardadas = localStorage.getItem('categorias');
@@ -43,6 +56,116 @@ const HabitTracker = () => {
     }
   }, [registros]);
 
+  useEffect(() => {
+    if (pomodoroActivo && !enPausa) {
+      intervaloRef.current = setInterval(() => {
+        setTiempoActual(prev => {
+          if (prev <= 1) {
+            clearInterval(intervaloRef.current);
+            manejarFinCiclo();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (intervaloRef.current) clearInterval(intervaloRef.current);
+    };
+  }, [pomodoroActivo, enPausa]);
+
+  const obtenerDiaSemana = (fecha) => {
+    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    return dias[new Date(fecha + 'T00:00:00').getDay()];
+  };
+
+  const iniciarPomodoro = () => {
+    if (!categoriaActual) {
+      alert('Selecciona una categoría primero');
+      return;
+    }
+    setMostrarPomodoro(true);
+    setPomodoroActivo(true);
+    setEnPausa(false);
+    setTiempoActual(tiempoPomodoro);
+    setCicloPomodoro(1);
+    setMinutosAcumulados(0);
+    setHoraInicioPomodoro(new Date().getHours());
+  };
+
+  const pausarReanudarPomodoro = () => {
+    if (!enPausa) {
+      clearInterval(intervaloRef.current);
+      setEnPausa(true);
+      setPomodoroActivo(false);
+      const pausaInicio = tiempoPausa;
+      setTiempoActual(pausaInicio);
+      
+      const pausaInterval = setInterval(() => {
+        setTiempoActual(prev => {
+          if (prev <= 1) {
+            clearInterval(pausaInterval);
+            setEnPausa(false);
+            setPomodoroActivo(true);
+            setTiempoActual(tiempoPomodoro);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  };
+
+  const manejarFinCiclo = () => {
+    const minutosEstudiados = tiempoPomodoro / 60;
+    setMinutosAcumulados(prev => prev + minutosEstudiados);
+
+    if (cicloPomodoro < totalCiclos) {
+      setCicloPomodoro(prev => prev + 1);
+      setTiempoActual(tiempoPomodoro);
+      setPomodoroActivo(true);
+    } else {
+      finalizarPomodoro();
+    }
+  };
+
+  const finalizarPomodoro = () => {
+    setPomodoroActivo(false);
+    if (intervaloRef.current) clearInterval(intervaloRef.current);
+  };
+
+  const registrarEstudioPomodoro = () => {
+    const registro = {
+      fecha: new Date().toISOString().split('T')[0],
+      realizado: true,
+      valor: Math.round(minutosAcumulados),
+      diaSemana: obtenerDiaSemana(new Date().toISOString().split('T')[0]),
+      horaInicio: horaInicioPomodoro,
+      id: Date.now()
+    };
+
+    const registrosCategoria = registros[categoriaActual] || [];
+    const nuevosRegistrosCategoria = [...registrosCategoria, registro].sort((a, b) => 
+      new Date(a.fecha) - new Date(b.fecha)
+    );
+
+    setRegistros({
+      ...registros,
+      [categoriaActual]: nuevosRegistrosCategoria
+    });
+
+    setMostrarPomodoro(false);
+    setMinutosAcumulados(0);
+    setCicloPomodoro(1);
+    setEnPausa(false);
+  };
+
+  const formatearTiempo = (segundos) => {
+    const mins = Math.floor(segundos / 60);
+    const secs = segundos % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const agregarCategoria = () => {
     if (!nuevaCategoria.trim()) {
       alert('Por favor ingresa un nombre para la categoría');
@@ -63,7 +186,7 @@ const HabitTracker = () => {
   };
 
   const eliminarCategoria = (categoria) => {
-    if (!window.confirm(`¿Eliminar la categoría "${categoria}" y todos sus registros?`)) return;
+    if (!window.confirm(`¿Eliminar "${categoria}" y todos sus registros?`)) return;
     
     const nuevasCategorias = categorias.filter(c => c !== categoria);
     const nuevosRegistros = {...registros};
@@ -83,7 +206,7 @@ const HabitTracker = () => {
     }
 
     if (nuevoRegistro.realizado && (!nuevoRegistro.valor || nuevoRegistro.valor <= 0)) {
-      alert('Por favor ingresa el valor (minutos, veces, etc.)');
+      alert('Por favor ingresa los minutos');
       return;
     }
 
@@ -91,6 +214,8 @@ const HabitTracker = () => {
       fecha: nuevoRegistro.fecha,
       realizado: nuevoRegistro.realizado,
       valor: nuevoRegistro.realizado ? parseInt(nuevoRegistro.valor) : 0,
+      diaSemana: obtenerDiaSemana(nuevoRegistro.fecha),
+      horaInicio: new Date().getHours(),
       id: Date.now()
     };
 
@@ -126,15 +251,17 @@ const HabitTracker = () => {
       const registrosCategoria = registros[categoria] || [];
       const datos = registrosCategoria.map(r => ({
         'Fecha': r.fecha,
+        'Día': r.diaSemana || '',
         'Realizado': r.realizado ? 'Sí' : 'No',
-        'Valor': r.valor
+        'Minutos': r.valor,
+        'Hora': r.horaInicio || ''
       }));
 
       const ws = XLSX.utils.json_to_sheet(datos);
       XLSX.utils.book_append_sheet(wb, ws, categoria.substring(0, 31));
     });
 
-    XLSX.writeFile(wb, `habitos-backup-${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `study-tracker-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const importarExcel = (event) => {
@@ -158,8 +285,10 @@ const HabitTracker = () => {
             nuevasCategorias.push(sheetName);
             nuevosRegistros[sheetName] = jsonData.map((row, index) => ({
               fecha: row.Fecha,
-              realizado: row.Realizado === 'Sí' || row.Realizado === true,
-              valor: parseInt(row.Valor) || 0,
+              diaSemana: row.Día || obtenerDiaSemana(row.Fecha),
+              realizado: row.Realizado === 'Sí',
+              valor: parseInt(row.Minutos) || 0,
+              horaInicio: row.Hora || null,
               id: Date.now() + index
             }));
           }
@@ -168,10 +297,9 @@ const HabitTracker = () => {
         setCategorias(nuevasCategorias);
         setRegistros(nuevosRegistros);
         setCategoriaActual(nuevasCategorias[0] || null);
-        alert(`✅ Datos importados correctamente. ${nuevasCategorias.length} categorías cargadas.`);
+        alert(`✅ ${nuevasCategorias.length} categorías importadas.`);
       } catch (error) {
-        alert('Error al leer el archivo Excel. Verifica que tenga el formato correcto.');
-        console.error(error);
+        alert('Error al leer el archivo Excel.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -188,17 +316,17 @@ const HabitTracker = () => {
     const diasTotales = regs.length;
     const tasaCumplimiento = (diasRealizados / diasTotales) * 100;
 
-    const ultimos7 = regs.slice(-7);
-    const valoresUltimos7 = ultimos7.filter(r => r.realizado).map(r => r.valor);
-    const promedioUltimos7 = valoresUltimos7.length > 0 
-      ? valoresUltimos7.reduce((a, b) => a + b, 0) / valoresUltimos7.length 
+    const ultimosN = regs.slice(-diasTendencia);
+    const valoresUltimosN = ultimosN.filter(r => r.realizado).map(r => r.valor);
+    const promedioUltimosN = valoresUltimosN.length > 0 
+      ? valoresUltimosN.reduce((a, b) => a + b, 0) / valoresUltimosN.length 
       : 0;
 
     const calcularTendencia = () => {
-      if (valoresUltimos7.length < 3) return 'neutral';
-      const mitad = Math.floor(valoresUltimos7.length / 2);
-      const primera = valoresUltimos7.slice(0, mitad);
-      const segunda = valoresUltimos7.slice(mitad);
+      if (valoresUltimosN.length < 3) return 'neutral';
+      const mitad = Math.floor(valoresUltimosN.length / 2);
+      const primera = valoresUltimosN.slice(0, mitad);
+      const segunda = valoresUltimosN.slice(mitad);
       
       const promPrimera = primera.reduce((a, b) => a + b, 0) / primera.length;
       const promSegunda = segunda.reduce((a, b) => a + b, 0) / segunda.length;
@@ -211,6 +339,15 @@ const HabitTracker = () => {
     };
 
     const tendencia = calcularTendencia();
+
+    const calcularMinutosParaEstable = () => {
+      if (tendencia === 'bajando') {
+        return Math.ceil(promedioUltimosN * 1.3);
+      } else if (tendencia === 'estable') {
+        return Math.ceil(promedioUltimosN * 1.1);
+      }
+      return Math.ceil(promedioUltimosN);
+    };
 
     let rachaActual = 0;
     for (let i = regs.length - 1; i >= 0; i--) {
@@ -225,22 +362,31 @@ const HabitTracker = () => {
     let probabilidadManana = 50 + factorRacha + factorCumplimiento + factorTendencia;
     probabilidadManana = Math.max(5, Math.min(95, probabilidadManana));
 
-    const valorSugerido = tendencia === 'bajando' 
-      ? Math.ceil(promedioUltimos7 * 1.2)
-      : Math.ceil(promedioUltimos7 * 1.1);
-
+    const valorSugerido = calcularMinutosParaEstable();
     const probabilidadCompletar = Math.min(95, tasaCumplimiento);
+
+    const horasFrecuencia = {};
+    regs.filter(r => r.realizado && r.horaInicio != null).forEach(r => {
+      horasFrecuencia[r.horaInicio] = (horasFrecuencia[r.horaInicio] || 0) + r.valor;
+    });
+
+    const mejorHora = Object.keys(horasFrecuencia).length > 0
+      ? Object.keys(horasFrecuencia).reduce((a, b) => 
+          horasFrecuencia[a] > horasFrecuencia[b] ? a : b
+        )
+      : null;
 
     return {
       diasRealizados,
       diasTotales,
       tasaCumplimiento: tasaCumplimiento.toFixed(1),
-      promedioUltimos7: promedioUltimos7.toFixed(0),
+      promedioUltimosN: promedioUltimosN.toFixed(0),
       tendencia,
       rachaActual,
       probabilidadManana: probabilidadManana.toFixed(0),
       valorSugerido,
-      probabilidadCompletar: probabilidadCompletar.toFixed(0)
+      probabilidadCompletar: probabilidadCompletar.toFixed(0),
+      mejorHora: mejorHora ? `${mejorHora}:00` : 'N/A'
     };
   };
 
@@ -261,7 +407,7 @@ const HabitTracker = () => {
   const datosGrafico = categoriaActual && registros[categoriaActual]
     ? registros[categoriaActual].filter(r => r.realizado).map(r => ({
         fecha: new Date(r.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
-        valor: r.valor
+        minutos: r.valor
       }))
     : [];
 
@@ -271,38 +417,101 @@ const HabitTracker = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-indigo-900 mb-2 text-center">
-          📊 Tracker de Hábitos Multi-Categoría
+          📚 Study Tracker
         </h1>
-        <p className="text-center text-gray-600 mb-8">Analiza múltiples hábitos con estadísticas predictivas</p>
+        <p className="text-center text-gray-600 mb-8">Analiza tus hábitos de estudio</p>
+
+        {mostrarPomodoro && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-md w-full">
+              {!pomodoroActivo && cicloPomodoro > totalCiclos ? (
+                <div className="text-center">
+                  <h2 className="text-3xl font-bold text-green-600 mb-4">🎉 ¡Felicitaciones!</h2>
+                  <p className="text-xl mb-4">Completaste {totalCiclos} ciclos</p>
+                  <p className="text-2xl font-bold text-indigo-900 mb-6">
+                    {Math.round(minutosAcumulados)} minutos
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={registrarEstudioPomodoro}
+                      className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium"
+                    >
+                      Registrar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCicloPomodoro(1);
+                        setTiempoActual(tiempoPomodoro);
+                        setPomodoroActivo(true);
+                        setEnPausa(false);
+                      }}
+                      className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-medium"
+                    >
+                      Otro
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold text-indigo-900 mb-4 text-center">
+                    {enPausa ? '⏸️ PAUSA' : '⏱️ Pomodoro'}
+                  </h2>
+                  <p className="text-center text-gray-600 mb-2">
+                    Ciclo {cicloPomodoro} / {totalCiclos}
+                  </p>
+                  <div className="text-6xl font-bold text-center text-indigo-900 mb-6">
+                    {formatearTiempo(tiempoActual)}
+                  </div>
+                  <div className="flex gap-3 mb-4">
+                    <button
+                      onClick={pausarReanudarPomodoro}
+                      disabled={enPausa}
+                      className="flex-1 bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 font-medium flex items-center justify-center gap-2 disabled:bg-gray-400"
+                    >
+                      <Pause size={20} />
+                      Pausa
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPomodoroActivo(false);
+                        setMostrarPomodoro(false);
+                        setEnPausa(false);
+                        if (intervaloRef.current) clearInterval(intervaloRef.current);
+                      }}
+                      className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center justify-center gap-2"
+                    >
+                      <Square size={20} />
+                      Detener
+                    </button>
+                  </div>
+                  <p className="text-center text-sm text-gray-600">
+                    Acumulado: {Math.round(minutosAcumulados)} min
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={exportarExcel}
               disabled={categorias.length === 0}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium disabled:bg-gray-400"
             >
               <Download size={18} />
-              Exportar Excel
+              Exportar
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-medium"
             >
               <Upload size={18} />
-              Importar Excel
+              Importar
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={importarExcel}
-              className="hidden"
-            />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={importarExcel} className="hidden" />
           </div>
-          <p className="text-center text-xs text-gray-500 mt-3">
-            💾 Archivos compatibles con Excel y Google Sheets (.xlsx)
-          </p>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -313,10 +522,10 @@ const HabitTracker = () => {
             </h2>
             <button
               onClick={() => setMostrarNuevaCategoria(!mostrarNuevaCategoria)}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-medium"
             >
               <Plus size={18} />
-              Nueva Categoría
+              Nueva
             </button>
           </div>
 
@@ -327,14 +536,11 @@ const HabitTracker = () => {
                   type="text"
                   value={nuevaCategoria}
                   onChange={(e) => setNuevaCategoria(e.target.value)}
-                  placeholder="Ej: Inglés, Gym, Leer, Meditar..."
-                  className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Ej: Matemáticas, Inglés..."
+                  className="flex-1 p-2 border rounded-lg"
                   onKeyPress={(e) => e.key === 'Enter' && agregarCategoria()}
                 />
-                <button
-                  onClick={agregarCategoria}
-                  className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium"
-                >
+                <button onClick={agregarCategoria} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium">
                   Crear
                 </button>
                 <button
@@ -356,17 +562,15 @@ const HabitTracker = () => {
                 <div key={cat} className="relative group">
                   <button
                     onClick={() => setCategoriaActual(cat)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      categoriaActual === cat
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    className={`px-4 py-2 rounded-lg font-medium ${
+                      categoriaActual === cat ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                   >
                     {cat}
                   </button>
                   <button
                     onClick={() => eliminarCategoria(cat)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100"
                   >
                     <X size={14} />
                   </button>
@@ -375,7 +579,7 @@ const HabitTracker = () => {
             </div>
           ) : (
             <p className="text-gray-500 text-center py-4">
-              👋 Crea tu primera categoría para comenzar
+              👋 Crea tu primera categoría
             </p>
           )}
         </div>
@@ -383,93 +587,153 @@ const HabitTracker = () => {
         {categoriaActual && (
           <>
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4 text-indigo-800">
-                Registrar: {categoriaActual}
+              <h2 className="text-xl font-semibold text-indigo-800 mb-4 flex items-center gap-2">
+                <Clock size={24} />
+                Iniciar Estudio
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Fecha</label>
-                  <input
-                    type="date"
-                    value={nuevoRegistro.fecha}
-                    onChange={(e) => setNuevoRegistro({...nuevoRegistro, fecha: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                  />
+              <button
+                onClick={iniciarPomodoro}
+                className="w-full bg-indigo-600 text-white px-6 py-4 rounded-lg hover:bg-indigo-700 font-bold text-lg flex items-center justify-center gap-3"
+              >
+                <Play size={24} />
+                Pomodoro (2 × 20 min)
+              </button>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg mb-6">
+              <button
+                onClick={() => setRegistroAbierto(!registroAbierto)}
+                className="w-full p-6 flex justify-between items-center hover:bg-gray-50"
+              >
+                <h2 className="text-xl font-semibold text-indigo-800">Registrar Manualmente</h2>
+                {registroAbierto ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+              </button>
+              
+              {registroAbierto && (
+                <div className="p-6 border-t">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Fecha</label>
+                      <input
+                        type="date"
+                        value={nuevoRegistro.fecha}
+                        onChange={(e) => setNuevoRegistro({...nuevoRegistro, fecha: e.target.value})}
+                        className="w-full p-2 border rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">¿Estudiaste?</label>
+                      <select
+                        value={nuevoRegistro.realizado}
+                        onChange={(e) => setNuevoRegistro({...nuevoRegistro, realizado: e.target.value === 'true'})}
+                        className="w-full p-2 border rounded-lg"
+                      >
+                        <option value="true">Sí</option>
+                        <option value="false">No</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Minutos</label>
+                      <input
+                        type="number"
+                        value={nuevoRegistro.valor}
+                        onChange={(e) => setNuevoRegistro({...nuevoRegistro, valor: e.target.value})}
+                        disabled={!nuevoRegistro.realizado}
+                        placeholder="Ej: 30"
+                        className="w-full p-2 border rounded-lg disabled:bg-gray-100"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={agregarRegistro}
+                        className="w-full bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 font-medium"
+                      >
+                        Agregar
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">¿Realizado?</label>
-                  <select
-                    value={nuevoRegistro.realizado}
-                    onChange={(e) => setNuevoRegistro({...nuevoRegistro, realizado: e.target.value === 'true'})}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="true">Sí</option>
-                    <option value="false">No</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Valor</label>
-                  <input
-                    type="number"
-                    value={nuevoRegistro.valor}
-                    onChange={(e) => setNuevoRegistro({...nuevoRegistro, valor: e.target.value})}
-                    disabled={!nuevoRegistro.realizado}
-                    placeholder="Ej: 30"
-                    className="w-full p-2 border border-gray-300 rounded-lg disabled:bg-gray-100"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    onClick={agregarRegistro}
-                    className="w-full bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 font-medium"
-                  >
-                    Agregar
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
 
             {metricas && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-medium text-gray-600">Probabilidad Mañana</h3>
-                      <Calendar className="text-indigo-600" size={20} />
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-indigo-900">Tendencia</h3>
+                    <select
+                      value={diasTendencia}
+                      onChange={(e) => setDiasTendencia(parseInt(e.target.value))}
+                      className="p-2 border rounded-lg"
+                    >
+                      <option value={7}>7 días</option>
+                      <option value={14}>14 días</option>
+                      <option value={30}>30 días</option>
+                      <option value={60}>60 días</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="bg-indigo-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-600">Probabilidad</h4>
+                        <Calendar className="text-indigo-600" size={20} />
+                      </div>
+                      <p className="text-3xl font-bold text-indigo-900">{metricas.probabilidadManana}%</p>
                     </div>
-                    <p className="text-3xl font-bold text-indigo-900">{metricas.probabilidadManana}%</p>
-                    <p className="text-xs text-gray-500 mt-1">De que lo realices</p>
+
+                    <div className="bg-white rounded-lg p-4 border-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-600">Tendencia</h4>
+                        {getTendenciaIcon(metricas.tendencia)}
+                      </div>
+                      <p className={`text-2xl font-bold ${getTendenciaColor(metricas.tendencia)}`}>
+                        {metricas.tendencia === 'subiendo' ? '↗ Subiendo' : 
+                         metricas.tendencia === 'bajando' ? '↘ Bajando' : '→ Estable'}
+                      </p>
+                    </div>
+
+                    <div className="bg-yellow-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-600">Racha</h4>
+                        <Award className="text-yellow-500" size={20} />
+                      </div>
+                      <p className="text-3xl font-bold text-yellow-600">{metricas.rachaActual} días</p>
+                    </div>
+
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-600">Tasa</h4>
+                        <Target className="text-green-600" size={20} />
+                      </div>
+                      <p className="text-3xl font-bold text-green-600">{metricas.probabilidadCompletar}%</p>
+                    </div>
+
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-600">Mejor Hora</h4>
+                        <Clock className="text-purple-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold text-purple-600">{metricas.mejorHora}</p>
+                    </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-medium text-gray-600">Tendencia</h3>
-                      {getTendenciaIcon(metricas.tendencia)}
+                  {metricas.tendencia === 'bajando' && (
+                    <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+                      <p className="text-red-800 font-medium">⚠️ Para volver a estable</p>
+                      <p className="text-sm text-red-600 mt-1">
+                        Estudia al menos {metricas.valorSugerido} minutos
+                      </p>
                     </div>
-                    <p className={`text-3xl font-bold ${getTendenciaColor(metricas.tendencia)}`}>
-                      {metricas.tendencia === 'subiendo' ? '↗ Subiendo' : 
-                       metricas.tendencia === 'bajando' ? '↘ Bajando' : '→ Estable'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">Últimos 7 días</p>
-                  </div>
+                  )}
 
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-medium text-gray-600">Racha Actual</h3>
-                      <Award className="text-yellow-500" size={20} />
+                  {metricas.tendencia === 'estable' && (
+                    <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+                      <p className="text-blue-800 font-medium">📊 Para mejorar</p>
+                      <p className="text-sm text-blue-600 mt-1">
+                        Estudia al menos {metricas.valorSugerido} minutos
+                      </p>
                     </div>
-                    <p className="text-3xl font-bold text-yellow-600">{metricas.rachaActual} días</p>
-                    <p className="text-xs text-gray-500 mt-1">Consecutivos</p>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-medium text-gray-600">Tasa Éxito</h3>
-                      <Target className="text-green-600" size={20} />
-                    </div>
-                    <p className="text-3xl font-bold text-green-600">{metricas.probabilidadCompletar}%</p>
-                    <p className="text-xs text-gray-500 mt-1">Cumplimiento</p>
-                  </div>
+                  )}
                 </div>
 
                 {datosGrafico.length > 0 && (
@@ -482,7 +746,7 @@ const HabitTracker = () => {
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="valor" stroke="#4f46e5" strokeWidth={2} />
+                        <Line type="monotone" dataKey="minutos" stroke="#4f46e5" strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -494,10 +758,11 @@ const HabitTracker = () => {
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="border-b-2 border-indigo-200">
+                          <tr className="border-b-2">
                             <th className="text-left p-3">Fecha</th>
-                            <th className="text-left p-3">¿Realizado?</th>
-                            <th className="text-left p-3">Valor</th>
+                            <th className="text-left p-3">Día</th>
+                            <th className="text-left p-3">¿Estudiaste?</th>
+                            <th className="text-left p-3">Minutos</th>
                             <th className="text-left p-3">Acciones</th>
                           </tr>
                         </thead>
@@ -505,6 +770,7 @@ const HabitTracker = () => {
                           {[...registrosActuales].reverse().map((registro) => (
                             <tr key={registro.id} className="border-b hover:bg-indigo-50">
                               <td className="p-3">{new Date(registro.fecha).toLocaleDateString('es-ES')}</td>
+                              <td className="p-3 text-sm">{registro.diaSemana}</td>
                               <td className="p-3">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   registro.realizado ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -536,7 +802,10 @@ const HabitTracker = () => {
         {!categoriaActual && categorias.length === 0 && (
           <div className="bg-white rounded-lg shadow-lg p-12 text-center">
             <p className="text-gray-500 text-lg">
-              👋 ¡Bienvenido! Crea tu primera categoría para comenzar
+              👋 ¡Bienvenido a Study Tracker!
+            </p>
+            <p className="text-gray-400 text-sm mt-2">
+              Crea tu primera categoría para comenzar
             </p>
           </div>
         )}
@@ -545,4 +814,4 @@ const HabitTracker = () => {
   );
 };
 
-export default HabitTracker;
+export default StudyTracker;

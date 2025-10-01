@@ -12,6 +12,8 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const [completado, setCompletado] = useState(false);
   const [tiempoEstudiado, setTiempoEstudiado] = useState(0);
   const [tiempoInicioTimestamp, setTiempoInicioTimestamp] = useState(null);
+  const [tienePermisoNotificaciones, setTienePermisoNotificaciones] =
+    useState(false);
 
   const intervaloRef = useRef(null);
   const scrollRef = useRef(null);
@@ -29,6 +31,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const barrasCompletadas = Math.floor(
     (1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras
   );
+
+  // Verificar permisos de notificación al montar
+  useEffect(() => {
+    if ("Notification" in window) {
+      setTienePermisoNotificaciones(Notification.permission === "granted");
+    }
+  }, []);
 
   // Cargar estado guardado al montar
   useEffect(() => {
@@ -116,64 +125,74 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
           liberarWakeLock();
           limpiarEstado();
 
-          // Enviar notificación
+          // Enviar notificación - Compatible con móviles
           const minutosCompletados = Math.floor(duracionTotal / 60);
 
-          // Verificar el estado de las notificaciones
-          if ("Notification" in window) {
-            console.log("Estado de notificaciones:", Notification.permission);
+          // Primero intentar con Service Worker (funciona en móviles)
+          if ("serviceWorker" in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready
+              .then(function (registration) {
+                registration.showNotification("¡Focus Mode Completado! 🎉", {
+                  body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
+                  icon: "/icon-192.png",
+                  badge: "/icon-192.png",
+                  vibrate: [200, 100, 200],
+                  tag: "focus-complete",
+                  requireInteraction: false,
+                  silent: false,
+                  data: {
+                    dateOfArrival: Date.now(),
+                    primaryKey: "focus-complete",
+                  },
+                });
+                console.log("Notificación enviada vía Service Worker");
+              })
+              .catch(function (error) {
+                console.error("Error con Service Worker:", error);
 
-            if (Notification.permission === "granted") {
-              try {
-                // Intentar con la API de Notification directamente
-                const notification = new Notification(
-                  "¡Focus Mode Completado! 🎉",
-                  {
-                    body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
-                    icon: "/icon-192.png",
-                    badge: "/icon-192.png",
-                    tag: "focus-complete",
-                    requireInteraction: false,
-                  }
-                );
-
-                console.log("Notificación enviada:", notification);
-
-                // Auto-cerrar después de 5 segundos
-                setTimeout(() => notification.close(), 5000);
-              } catch (error) {
-                console.error("Error al enviar notificación:", error);
-                // Fallback: intentar con el Service Worker
+                // Fallback: intentar con Notification API (desktop)
                 if (
-                  "serviceWorker" in navigator &&
-                  navigator.serviceWorker.controller
+                  "Notification" in window &&
+                  Notification.permission === "granted"
                 ) {
-                  navigator.serviceWorker.controller.postMessage({
-                    type: "TIMER_COMPLETE",
-                    minutes: minutosCompletados,
-                  });
-                  console.log("Mensaje enviado al Service Worker");
-                }
-              }
-            } else if (Notification.permission === "default") {
-              // Pedir permisos si no se han dado
-              Notification.requestPermission().then((permission) => {
-                console.log("Permiso solicitado:", permission);
-                if (permission === "granted") {
-                  // Reintentar enviar la notificación
-                  new Notification("¡Focus Mode Completado! 🎉", {
-                    body: `Completaste ${minutosCompletados} minutos de estudio`,
-                    icon: "/icon-192.png",
-                  });
+                  try {
+                    const notification = new Notification(
+                      "¡Focus Mode Completado! 🎉",
+                      {
+                        body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
+                        icon: "/icon-192.png",
+                        tag: "focus-complete",
+                      }
+                    );
+                    setTimeout(() => notification.close(), 5000);
+                  } catch (err) {
+                    console.error("Error con Notification API:", err);
+                  }
                 }
               });
-            } else {
-              console.log("Notificaciones bloqueadas por el usuario");
+          } else if (
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
+            // Si no hay Service Worker, usar Notification API (desktop)
+            try {
+              const notification = new Notification(
+                "¡Focus Mode Completado! 🎉",
+                {
+                  body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
+                  icon: "/icon-192.png",
+                  tag: "focus-complete",
+                }
+              );
+              setTimeout(() => notification.close(), 5000);
+            } catch (error) {
+              console.error("Error al enviar notificación:", error);
             }
-          } else {
-            console.log(
-              "Las notificaciones no están soportadas en este navegador"
-            );
+          }
+
+          // Intentar vibrar el dispositivo (funciona en móviles)
+          if ("vibrate" in navigator) {
+            navigator.vibrate([200, 100, 200, 100, 400]);
           }
         } else {
           setTiempoRestante(nuevoTiempoRestante);
@@ -199,7 +218,6 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     categoriaActual,
     liberarWakeLock,
     limpiarEstado,
-    mostrarNotificacion,
   ]);
 
   const iniciarSesion = async () => {
@@ -215,6 +233,45 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   const togglePausa = () => {
     setEnPausa(!enPausa);
+  };
+
+  const solicitarPermisoNotificaciones = async () => {
+    if ("Notification" in window && Notification.permission === "default") {
+      try {
+        const permission = await Notification.requestPermission();
+        setTienePermisoNotificaciones(permission === "granted");
+
+        if (permission === "granted") {
+          // Primero intentar con Service Worker (móviles)
+          if ("serviceWorker" in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready
+              .then(function (registration) {
+                registration.showNotification("¡Notificaciones activadas! ✅", {
+                  body: "Recibirás alertas cuando completes tus sesiones de estudio",
+                  icon: "/icon-192.png",
+                  badge: "/icon-192.png",
+                  vibrate: [100, 50, 100],
+                });
+              })
+              .catch(function (error) {
+                // Fallback a Notification API
+                new Notification("¡Notificaciones activadas! ✅", {
+                  body: "Recibirás alertas cuando completes tus sesiones de estudio",
+                  icon: "/icon-192.png",
+                });
+              });
+          } else {
+            // Desktop - usar Notification API
+            new Notification("¡Notificaciones activadas! ✅", {
+              body: "Recibirás alertas cuando completes tus sesiones de estudio",
+              icon: "/icon-192.png",
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error al solicitar permisos:", error);
+      }
+    }
   };
 
   const guardarYCerrar = () => {
@@ -274,7 +331,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     const scrollTop = container.scrollTop;
 
     const centerIndex = Math.round(scrollTop / itemHeight);
-    const nuevoTiempo = Math.max(5, Math.min(60, centerIndex + 5));
+    const nuevoTiempo = Math.max(1, Math.min(60, centerIndex + 1));
 
     setTiempoSeleccionado(nuevoTiempo);
   };
@@ -282,7 +339,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   useEffect(() => {
     if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 80;
-      const targetScroll = (tiempoSeleccionado - 5) * itemHeight;
+      const targetScroll = (tiempoSeleccionado - 1) * itemHeight;
       scrollRef.current.scrollTo({
         top: targetScroll,
         behavior: "smooth",
@@ -332,6 +389,28 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
               Focus Mode
             </h2>
             <p className='text-gray-400 text-center mb-2'>{categoriaActual}</p>
+
+            {/* Mostrar estado de notificaciones */}
+            {!tienePermisoNotificaciones && "Notification" in window && (
+              <div className='bg-yellow-900/50 border border-yellow-600 rounded-lg p-3 mb-4'>
+                <p className='text-yellow-300 text-sm text-center mb-2'>
+                  🔔 Activa las notificaciones para recibir alertas
+                </p>
+                <button
+                  onClick={solicitarPermisoNotificaciones}
+                  className='w-full bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 font-medium text-sm'
+                >
+                  Activar Notificaciones
+                </button>
+              </div>
+            )}
+
+            {tienePermisoNotificaciones && (
+              <p className='text-green-400 text-center mb-2 text-xs'>
+                ✓ Notificaciones activadas
+              </p>
+            )}
+
             {wakeLockSupported && (
               <p className='text-green-400 text-center mb-6 text-xs'>
                 ✓ Pantalla permanecerá encendida
@@ -360,8 +439,8 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                 }}
               >
                 <div className='h-28'></div>
-                {[...Array(56)].map((_, i) => {
-                  const mins = i + 5;
+                {[...Array(60)].map((_, i) => {
+                  const mins = i + 1;
                   const isSelected = mins === tiempoSeleccionado;
                   return (
                     <div

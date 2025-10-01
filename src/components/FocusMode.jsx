@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Pause, Play, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import { Pause, Play, X } from "lucide-react";
+import { useWakeLock } from "../hooks/useWakeLock";
+import { useTimerPersistence } from "../hooks/useTimerPersistence";
 
 const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const [tiempoSeleccionado, setTiempoSeleccionado] = useState(30);
@@ -7,23 +9,76 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const [enPausa, setEnPausa] = useState(true);
   const [iniciado, setIniciado] = useState(false);
   const [tiempoEstudiado, setTiempoEstudiado] = useState(0);
-  const [notificacionesPermitidas, setNotificacionesPermitidas] = useState(false);
+  const [tiempoInicioTimestamp, setTiempoInicioTimestamp] = useState(null);
+  const [notificacionesPermitidas, setNotificacionesPermitidas] =
+    useState(false);
+
   const intervaloRef = useRef(null);
   const scrollRef = useRef(null);
 
+  // Hooks personalizados
+  const {
+    solicitar: solicitarWakeLock,
+    liberar: liberarWakeLock,
+    isSupported: wakeLockSupported,
+  } = useWakeLock();
+  const { guardarEstado, cargarEstado, limpiarEstado, calcularTiempoRestante } =
+    useTimerPersistence("focusTimer");
+
   const totalBarras = 40;
-  const barrasCompletadas = Math.floor((1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras);
+  const barrasCompletadas = Math.floor(
+    (1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras
+  );
 
   // Solicitar permisos de notificación
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
+    if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().then((permission) => {
-        setNotificacionesPermitidas(permission === 'granted');
+        setNotificacionesPermitidas(permission === "granted");
       });
-    } else if (Notification.permission === 'granted') {
+    } else if (Notification.permission === "granted") {
       setNotificacionesPermitidas(true);
     }
   }, []);
+
+  // Recuperar estado al montar
+  useEffect(() => {
+    const estadoGuardado = cargarEstado();
+    if (estadoGuardado && estadoGuardado.activo) {
+      const restante = calcularTiempoRestante(
+        estadoGuardado.tiempoInicioTimestamp,
+        estadoGuardado.duracionSegundos
+      );
+
+      if (restante > 0) {
+        setTiempoSeleccionado(Math.ceil(estadoGuardado.duracionSegundos / 60));
+        setTiempoRestante(restante);
+        setTiempoInicioTimestamp(estadoGuardado.tiempoInicioTimestamp);
+        setIniciado(true);
+        setEnPausa(false);
+        solicitarWakeLock();
+      } else {
+        // Timer terminó mientras estaba cerrada
+        const minutosEstudiados = Math.floor(
+          estadoGuardado.duracionSegundos / 60
+        );
+        mostrarNotificacionCompleto(minutosEstudiados);
+        limpiarEstado();
+      }
+    }
+  }, []);
+
+  // Guardar estado cada vez que cambia
+  useEffect(() => {
+    if (iniciado && tiempoInicioTimestamp) {
+      guardarEstado({
+        activo: true,
+        tiempoInicioTimestamp,
+        duracionSegundos: tiempoSeleccionado * 60,
+        categoriaActual,
+      });
+    }
+  }, [iniciado, tiempoInicioTimestamp, tiempoSeleccionado, categoriaActual]);
 
   // Actualizar título de la página
   useEffect(() => {
@@ -31,31 +86,16 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
       const mins = Math.ceil(tiempoRestante / 60);
       document.title = `⏱️ ${mins} min - Study Tracker`;
     } else {
-      document.title = 'Study Tracker';
+      document.title = "Study Tracker";
     }
   }, [tiempoRestante, iniciado, enPausa]);
 
-  // Enviar actualizaciones al Service Worker
-  const enviarMensajeSW = (tipo, datos) => {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: tipo,
-        ...datos
-      });
-    }
-  };
-
+  // Timer principal
   useEffect(() => {
     if (!enPausa && iniciado) {
       intervaloRef.current = setInterval(() => {
-        setTiempoRestante(prev => {
+        setTiempoRestante((prev) => {
           const nuevoTiempo = prev - 1;
-          
-          // Actualizar badge cada minuto
-          if (nuevoTiempo % 60 === 0) {
-            const minutosRestantes = Math.ceil(nuevoTiempo / 60);
-            enviarMensajeSW('TIMER_UPDATE', { minutes: minutosRestantes });
-          }
 
           if (nuevoTiempo <= 1) {
             clearInterval(intervaloRef.current);
@@ -64,7 +104,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
           }
           return nuevoTiempo;
         });
-        setTiempoEstudiado(prev => prev + 1);
+        setTiempoEstudiado((prev) => prev + 1);
       }, 1000);
     }
     return () => {
@@ -72,10 +112,26 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     };
   }, [enPausa, iniciado, tiempoSeleccionado]);
 
-  const iniciarSesion = () => {
+  const mostrarNotificacionCompleto = (minutos) => {
+    if (notificacionesPermitidas && "Notification" in window) {
+      new Notification("¡Focus Mode Completado!", {
+        body: `Completaste ${minutos} minutos de estudio en ${categoriaActual}`,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        vibrate: [200, 100, 200],
+      });
+    }
+  };
+
+  const iniciarSesion = async () => {
+    const timestamp = Date.now();
+    setTiempoInicioTimestamp(timestamp);
     setIniciado(true);
     setEnPausa(false);
     setTiempoRestante(tiempoSeleccionado * 60);
+
+    // Activar Wake Lock
+    await solicitarWakeLock();
   };
 
   const togglePausa = () => {
@@ -84,18 +140,8 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   const finalizarSesion = (minutosEstudiados) => {
     const minutos = Math.floor(minutosEstudiados || tiempoEstudiado / 60);
-    
-    // Notificar al Service Worker
-    enviarMensajeSW('TIMER_COMPLETE', { minutes: minutos });
 
-    // Mostrar notificación si están permitidas
-    if (notificacionesPermitidas && 'Notification' in window) {
-      new Notification('¡Focus Mode Completado!', {
-        body: `Completaste ${minutos} minutos de estudio en ${categoriaActual}`,
-        icon: '/icon-192.png',
-        vibrate: [200, 100, 200]
-      });
-    }
+    mostrarNotificacionCompleto(minutos);
 
     if (minutos > 0) {
       onComplete(minutos);
@@ -103,20 +149,23 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     cerrarModal();
   };
 
-  const cerrarModal = () => {
+  const cerrarModal = async () => {
     if (intervaloRef.current) clearInterval(intervaloRef.current);
-    document.title = 'Study Tracker';
+
+    // Liberar Wake Lock
+    await liberarWakeLock();
+
+    // Limpiar estado
+    limpiarEstado();
+
+    document.title = "Study Tracker";
     setIniciado(false);
     setEnPausa(true);
     setTiempoRestante(30 * 60);
     setTiempoSeleccionado(30);
     setTiempoEstudiado(0);
-    
-    // Limpiar badge
-    if (navigator.clearAppBadge) {
-      navigator.clearAppBadge();
-    }
-    
+    setTiempoInicioTimestamp(null);
+
     onClose();
   };
 
@@ -149,22 +198,28 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 max-w-md w-full shadow-2xl">
-        
+    <div className='fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-4'>
+      <div className='bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 max-w-md w-full shadow-2xl'>
         {!iniciado ? (
           <>
-            <h2 className="text-3xl font-bold text-white mb-2 text-center">Focus Mode</h2>
-            <p className="text-gray-400 text-center mb-8">{categoriaActual}</p>
-            
-            <div className="mb-8">
-              <div 
+            <h2 className='text-3xl font-bold text-white mb-2 text-center'>
+              Focus Mode
+            </h2>
+            <p className='text-gray-400 text-center mb-2'>{categoriaActual}</p>
+            {wakeLockSupported && (
+              <p className='text-green-400 text-center mb-6 text-xs'>
+                ✓ Pantalla permanecerá encendida
+              </p>
+            )}
+
+            <div className='mb-8'>
+              <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className="h-48 overflow-y-scroll snap-y snap-mandatory scrollbar-hide"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                className='h-48 overflow-y-scroll snap-y snap-mandatory scrollbar-hide'
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
-                <div className="h-24"></div>
+                <div className='h-24'></div>
                 {[...Array(56)].map((_, i) => {
                   const mins = i + 5;
                   return (
@@ -172,29 +227,31 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                       key={mins}
                       className={`h-16 flex items-center justify-center snap-center transition-all ${
                         mins === tiempoSeleccionado
-                          ? 'text-5xl font-bold text-white'
-                          : 'text-2xl text-gray-600'
+                          ? "text-5xl font-bold text-white"
+                          : "text-2xl text-gray-600"
                       }`}
                     >
                       {mins === tiempoSeleccionado && <span>{mins} min</span>}
-                      {mins !== tiempoSeleccionado && <span className="text-sm">{mins}</span>}
+                      {mins !== tiempoSeleccionado && (
+                        <span className='text-sm'>{mins}</span>
+                      )}
                     </div>
                   );
                 })}
-                <div className="h-24"></div>
+                <div className='h-24'></div>
               </div>
             </div>
 
-            <div className="flex gap-4">
+            <div className='flex gap-4'>
               <button
                 onClick={cerrarModal}
-                className="flex-1 bg-gray-700 text-white px-6 py-4 rounded-xl hover:bg-gray-600 font-bold"
+                className='flex-1 bg-gray-700 text-white px-6 py-4 rounded-xl hover:bg-gray-600 font-bold'
               >
                 Cancelar
               </button>
               <button
                 onClick={iniciarSesion}
-                className="flex-1 bg-blue-600 text-white px-6 py-4 rounded-xl hover:bg-blue-700 font-bold"
+                className='flex-1 bg-blue-600 text-white px-6 py-4 rounded-xl hover:bg-blue-700 font-bold'
               >
                 Iniciar
               </button>
@@ -202,52 +259,59 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
           </>
         ) : (
           <>
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-bold text-white">Focus Mode</h2>
-              <button onClick={handleCancelar} className="text-gray-400 hover:text-white">
+            <div className='flex justify-between items-center mb-8'>
+              <h2 className='text-2xl font-bold text-white'>Focus Mode</h2>
+              <button
+                onClick={handleCancelar}
+                className='text-gray-400 hover:text-white'
+              >
                 <X size={28} />
               </button>
             </div>
 
-            <div className="relative w-64 h-64 mx-auto mb-8">
-              <svg className="w-full h-full -rotate-90">
+            <div className='relative w-64 h-64 mx-auto mb-8'>
+              <svg className='w-full h-full -rotate-90'>
                 {[...Array(totalBarras)].map((_, i) => {
                   const angle = (360 / totalBarras) * i;
                   const isCompleted = i < barrasCompletadas;
                   return (
                     <line
                       key={i}
-                      x1="50%"
-                      y1="10%"
-                      x2="50%"
-                      y2="20%"
-                      stroke={isCompleted ? '#3b82f6' : '#374151'}
-                      strokeWidth="4"
-                      strokeLinecap="round"
+                      x1='50%'
+                      y1='10%'
+                      x2='50%'
+                      y2='20%'
+                      stroke={isCompleted ? "#3b82f6" : "#374151"}
+                      strokeWidth='4'
+                      strokeLinecap='round'
                       transform={`rotate(${angle} 128 128)`}
                     />
                   );
                 })}
               </svg>
-              
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-6xl font-bold text-white mb-2">
+
+              <div className='absolute inset-0 flex flex-col items-center justify-center'>
+                <div className='text-6xl font-bold text-white mb-2'>
                   {Math.ceil(tiempoRestante / 60)}
                 </div>
-                <div className="text-xl text-gray-400">min</div>
+                <div className='text-xl text-gray-400'>min</div>
               </div>
             </div>
 
-            <div className="flex justify-center gap-4">
+            <div className='flex justify-center gap-4'>
               <button
                 onClick={togglePausa}
-                className="bg-blue-600 text-white p-5 rounded-full hover:bg-blue-700 transition-all"
+                className='bg-blue-600 text-white p-5 rounded-full hover:bg-blue-700 transition-all'
               >
-                {enPausa ? <Play size={28} fill="white" /> : <Pause size={28} fill="white" />}
+                {enPausa ? (
+                  <Play size={28} fill='white' />
+                ) : (
+                  <Pause size={28} fill='white' />
+                )}
               </button>
             </div>
 
-            <p className="text-center text-gray-400 mt-6 text-sm">
+            <p className='text-center text-gray-400 mt-6 text-sm'>
               Tiempo estudiado: {Math.floor(tiempoEstudiado / 60)} min
             </p>
           </>

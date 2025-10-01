@@ -194,12 +194,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const handleScroll = (e) => {
     const container = e.target;
     const itemHeight = 80;
-    const containerHeight = 256;
     const scrollTop = container.scrollTop;
-    const paddingTop = 112;
 
-    const centerPosition = scrollTop + containerHeight / 2 - paddingTop;
-    const centerIndex = Math.round(centerPosition / itemHeight);
+    // Calcular qué elemento está en el centro
+    const centerIndex = Math.round(scrollTop / itemHeight);
     const nuevoTiempo = Math.max(5, Math.min(60, centerIndex + 5));
 
     setTiempoSeleccionado(nuevoTiempo);
@@ -208,14 +206,9 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   useEffect(() => {
     if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 80;
-      const containerHeight = 256;
-      const paddingTop = 112;
 
-      const targetScroll =
-        (tiempoSeleccionado - 5) * itemHeight -
-        containerHeight / 2 +
-        paddingTop +
-        itemHeight / 2;
+      // Posicionar el scroll para que el tiempo seleccionado esté en el centro
+      const targetScroll = (tiempoSeleccionado - 5) * itemHeight;
       scrollRef.current.scrollTop = targetScroll;
     }
   }, [iniciado, completado]);

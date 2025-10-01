@@ -193,9 +193,11 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   const handleScroll = (e) => {
     const container = e.target;
-    const itemHeight = 60;
-    const scrollTop = container.scrollTop + 96;
-    const centerIndex = Math.round(scrollTop / itemHeight);
+    const itemHeight = 80;
+    const containerHeight = container.clientHeight;
+    const scrollTop = container.scrollTop;
+    const centerOffset = containerHeight / 2 - itemHeight / 2;
+    const centerIndex = Math.round((scrollTop + centerOffset) / itemHeight);
     const nuevoTiempo = centerIndex + 5;
 
     setTiempoSeleccionado(Math.max(5, Math.min(60, nuevoTiempo)));
@@ -203,8 +205,11 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   useEffect(() => {
     if (scrollRef.current && !iniciado && !completado) {
-      const itemHeight = 60;
-      scrollRef.current.scrollTop = (tiempoSeleccionado - 5) * itemHeight;
+      const itemHeight = 80;
+      const containerHeight = scrollRef.current.clientHeight;
+      const centerOffset = containerHeight / 2 - itemHeight / 2;
+      scrollRef.current.scrollTop =
+        (tiempoSeleccionado - 5) * itemHeight - centerOffset;
     }
   }, [iniciado, completado]);
 
@@ -258,45 +263,43 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
             <div className='mb-8 relative'>
               <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-10'>
-                <div className='w-full h-16 bg-gradient-to-b from-transparent via-blue-500/20 to-transparent rounded-lg'></div>
-              </div>
-
-              <div className='text-center mb-2'>
-                <span className='text-2xl text-gray-400 font-semibold'>
-                  minutos
-                </span>
+                <div className='w-full h-20 bg-gradient-to-b from-transparent via-blue-500/20 to-transparent rounded-lg'></div>
               </div>
 
               <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className='h-48 overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative'
+                className='h-64 overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative'
                 style={{
                   scrollbarWidth: "none",
                   msOverflowStyle: "none",
                 }}
               >
-                <div className='h-16'></div>
+                <div className='h-24'></div>
                 {[...Array(56)].map((_, i) => {
                   const mins = i + 5;
                   const isSelected = mins === tiempoSeleccionado;
                   return (
                     <div
                       key={mins}
-                      className={`h-16 flex items-center justify-center snap-center transition-all duration-150 ${
-                        isSelected
-                          ? "text-5xl font-bold text-white"
-                          : "text-xl text-gray-600"
-                      }`}
-                      style={{
-                        transform: isSelected ? "scale(1)" : "scale(0.8)",
-                      }}
+                      className='h-20 flex items-center justify-center snap-center'
                     >
-                      <span>{mins}</span>
+                      <div
+                        className={`flex items-baseline gap-2 transition-all duration-200 ${
+                          isSelected
+                            ? "text-6xl font-bold text-white"
+                            : "text-2xl text-gray-600"
+                        }`}
+                      >
+                        <span>{mins}</span>
+                        <span className={isSelected ? "text-3xl" : "text-lg"}>
+                          min
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
-                <div className='h-16'></div>
+                <div className='h-24'></div>
               </div>
             </div>
 

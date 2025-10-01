@@ -1,22 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pause, Play, X } from "lucide-react";
+import { Pause, Play, X, CheckCircle, RefreshCw } from "lucide-react";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { useTimerPersistence } from "../hooks/useTimerPersistence";
+import { useNotifications } from "../hooks/useNotifications";
 
 const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const [tiempoSeleccionado, setTiempoSeleccionado] = useState(30);
   const [tiempoRestante, setTiempoRestante] = useState(30 * 60);
   const [enPausa, setEnPausa] = useState(true);
   const [iniciado, setIniciado] = useState(false);
+  const [completado, setCompletado] = useState(false);
   const [tiempoEstudiado, setTiempoEstudiado] = useState(0);
   const [tiempoInicioTimestamp, setTiempoInicioTimestamp] = useState(null);
-  const [notificacionesPermitidas, setNotificacionesPermitidas] =
-    useState(false);
 
   const intervaloRef = useRef(null);
   const scrollRef = useRef(null);
 
-  // Hooks personalizados
   const {
     solicitar: solicitarWakeLock,
     liberar: liberarWakeLock,
@@ -24,22 +23,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   } = useWakeLock();
   const { guardarEstado, cargarEstado, limpiarEstado, calcularTiempoRestante } =
     useTimerPersistence("focusTimer");
+  const { mostrarNotificacion, permiso: notificacionesPermitidas } =
+    useNotifications();
 
   const totalBarras = 40;
   const barrasCompletadas = Math.floor(
     (1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras
   );
-
-  // Solicitar permisos de notificación
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission().then((permission) => {
-        setNotificacionesPermitidas(permission === "granted");
-      });
-    } else if (Notification.permission === "granted") {
-      setNotificacionesPermitidas(true);
-    }
-  }, []);
 
   // Recuperar estado al montar
   useEffect(() => {
@@ -58,19 +48,22 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
         setEnPausa(false);
         solicitarWakeLock();
       } else {
-        // Timer terminó mientras estaba cerrada
         const minutosEstudiados = Math.floor(
           estadoGuardado.duracionSegundos / 60
         );
-        mostrarNotificacionCompleto(minutosEstudiados);
+        mostrarNotificacion("¡Focus Mode Completado!", {
+          body: `Completaste ${minutosEstudiados} minutos de estudio en ${categoriaActual}`,
+        });
+        setCompletado(true);
+        setTiempoEstudiado(estadoGuardado.duracionSegundos);
         limpiarEstado();
       }
     }
   }, []);
 
-  // Guardar estado cada vez que cambia
+  // Guardar estado
   useEffect(() => {
-    if (iniciado && tiempoInicioTimestamp) {
+    if (iniciado && tiempoInicioTimestamp && !completado) {
       guardarEstado({
         activo: true,
         tiempoInicioTimestamp,
@@ -78,28 +71,34 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
         categoriaActual,
       });
     }
-  }, [iniciado, tiempoInicioTimestamp, tiempoSeleccionado, categoriaActual]);
+  }, [
+    iniciado,
+    tiempoInicioTimestamp,
+    tiempoSeleccionado,
+    categoriaActual,
+    completado,
+  ]);
 
-  // Actualizar título de la página
+  // Actualizar título
   useEffect(() => {
-    if (iniciado && !enPausa) {
+    if (iniciado && !enPausa && !completado) {
       const mins = Math.ceil(tiempoRestante / 60);
       document.title = `⏱️ ${mins} min - Study Tracker`;
     } else {
       document.title = "Study Tracker";
     }
-  }, [tiempoRestante, iniciado, enPausa]);
+  }, [tiempoRestante, iniciado, enPausa, completado]);
 
   // Timer principal
   useEffect(() => {
-    if (!enPausa && iniciado) {
+    if (!enPausa && iniciado && !completado) {
       intervaloRef.current = setInterval(() => {
         setTiempoRestante((prev) => {
           const nuevoTiempo = prev - 1;
 
           if (nuevoTiempo <= 1) {
             clearInterval(intervaloRef.current);
-            finalizarSesion(tiempoSeleccionado);
+            finalizarSesion();
             return 0;
           }
           return nuevoTiempo;
@@ -110,27 +109,16 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     return () => {
       if (intervaloRef.current) clearInterval(intervaloRef.current);
     };
-  }, [enPausa, iniciado, tiempoSeleccionado]);
-
-  const mostrarNotificacionCompleto = (minutos) => {
-    if (notificacionesPermitidas && "Notification" in window) {
-      new Notification("¡Focus Mode Completado!", {
-        body: `Completaste ${minutos} minutos de estudio en ${categoriaActual}`,
-        icon: "/icon-192.png",
-        badge: "/icon-192.png",
-        vibrate: [200, 100, 200],
-      });
-    }
-  };
+  }, [enPausa, iniciado, completado]);
 
   const iniciarSesion = async () => {
     const timestamp = Date.now();
     setTiempoInicioTimestamp(timestamp);
     setIniciado(true);
     setEnPausa(false);
+    setCompletado(false);
     setTiempoRestante(tiempoSeleccionado * 60);
-
-    // Activar Wake Lock
+    setTiempoEstudiado(0);
     await solicitarWakeLock();
   };
 
@@ -138,29 +126,49 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     setEnPausa(!enPausa);
   };
 
-  const finalizarSesion = (minutosEstudiados) => {
-    const minutos = Math.floor(minutosEstudiados || tiempoEstudiado / 60);
+  const finalizarSesion = async () => {
+    const minutosEstudiados = Math.floor(tiempoEstudiado / 60);
 
-    mostrarNotificacionCompleto(minutos);
+    await liberarWakeLock();
+    limpiarEstado();
 
-    if (minutos > 0) {
-      onComplete(minutos);
+    mostrarNotificacion("¡Focus Mode Completado! 🎉", {
+      body: `Completaste ${minutosEstudiados} minutos de estudio en ${categoriaActual}`,
+      tag: "focus-complete",
+    });
+
+    setCompletado(true);
+    setIniciado(false);
+    setEnPausa(true);
+  };
+
+  const guardarYCerrar = () => {
+    const minutosEstudiados = Math.floor(tiempoEstudiado / 60);
+    if (minutosEstudiados > 0) {
+      onComplete(minutosEstudiados);
     }
     cerrarModal();
   };
 
+  const iniciarOtroPomodoro = () => {
+    const minutosEstudiados = Math.floor(tiempoEstudiado / 60);
+    if (minutosEstudiados > 0) {
+      onComplete(minutosEstudiados);
+    }
+    setCompletado(false);
+    setTiempoEstudiado(0);
+    setTiempoRestante(tiempoSeleccionado * 60);
+  };
+
   const cerrarModal = async () => {
     if (intervaloRef.current) clearInterval(intervaloRef.current);
-
-    // Liberar Wake Lock
     await liberarWakeLock();
-
-    // Limpiar estado
     limpiarEstado();
 
     document.title = "Study Tracker";
     setIniciado(false);
     setEnPausa(true);
+    setCompletado(false);
     setTiempoRestante(30 * 60);
     setTiempoSeleccionado(30);
     setTiempoEstudiado(0);
@@ -173,34 +181,66 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     const minutosEstudiados = Math.floor(tiempoEstudiado / 60);
     if (minutosEstudiados > 0) {
       if (window.confirm(`¿Guardar ${minutosEstudiados} minutos estudiados?`)) {
-        finalizarSesion(minutosEstudiados);
-      } else {
-        cerrarModal();
+        onComplete(minutosEstudiados);
       }
-    } else {
-      cerrarModal();
     }
+    cerrarModal();
   };
 
   const handleScroll = (e) => {
-    const scrollTop = e.target.scrollTop;
+    const container = e.target;
     const itemHeight = 60;
-    const nuevoTiempo = Math.round(scrollTop / itemHeight) + 5;
+    const scrollTop = container.scrollTop;
+    const centerIndex = Math.round(scrollTop / itemHeight);
+    const nuevoTiempo = centerIndex + 5;
+
     setTiempoSeleccionado(Math.max(5, Math.min(60, nuevoTiempo)));
   };
 
   useEffect(() => {
     if (scrollRef.current && !iniciado) {
-      scrollRef.current.scrollTop = (tiempoSeleccionado - 5) * 60;
+      const itemHeight = 60;
+      scrollRef.current.scrollTop = (tiempoSeleccionado - 5) * itemHeight;
     }
-  }, []);
+  }, [iniciado]);
 
   if (!isOpen) return null;
 
   return (
     <div className='fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-4'>
       <div className='bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 max-w-md w-full shadow-2xl'>
-        {!iniciado ? (
+        {completado ? (
+          <>
+            <div className='text-center'>
+              <CheckCircle size={80} className='text-green-500 mx-auto mb-6' />
+              <h2 className='text-4xl font-bold text-white mb-4'>
+                ¡Felicitaciones! 🎉
+              </h2>
+              <p className='text-2xl text-gray-300 mb-2'>Completaste</p>
+              <p className='text-5xl font-bold text-blue-400 mb-8'>
+                {Math.floor(tiempoEstudiado / 60)} min
+              </p>
+              <p className='text-gray-400 mb-8'>de {categoriaActual}</p>
+
+              <div className='flex flex-col gap-3'>
+                <button
+                  onClick={guardarYCerrar}
+                  className='w-full bg-green-600 text-white px-6 py-4 rounded-xl hover:bg-green-700 font-bold text-lg flex items-center justify-center gap-2'
+                >
+                  <CheckCircle size={24} />
+                  Guardar y Finalizar
+                </button>
+                <button
+                  onClick={iniciarOtroPomodoro}
+                  className='w-full bg-blue-600 text-white px-6 py-4 rounded-xl hover:bg-blue-700 font-bold text-lg flex items-center justify-center gap-2'
+                >
+                  <RefreshCw size={24} />
+                  Iniciar Otro Focus
+                </button>
+              </div>
+            </div>
+          </>
+        ) : !iniciado ? (
           <>
             <h2 className='text-3xl font-bold text-white mb-2 text-center'>
               Focus Mode
@@ -212,33 +252,40 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
               </p>
             )}
 
-            <div className='mb-8'>
+            <div className='mb-8 relative'>
+              <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-10'>
+                <div className='w-full h-16 bg-gradient-to-b from-transparent via-blue-500/20 to-transparent'></div>
+              </div>
+
               <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className='h-48 overflow-y-scroll snap-y snap-mandatory scrollbar-hide'
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                className='h-48 overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative'
+                style={{
+                  scrollbarWidth: "none",
+                  msOverflowStyle: "none",
+                }}
               >
-                <div className='h-24'></div>
+                <div className='h-16'></div>
                 {[...Array(56)].map((_, i) => {
                   const mins = i + 5;
+                  const isSelected = mins === tiempoSeleccionado;
                   return (
                     <div
                       key={mins}
-                      className={`h-16 flex items-center justify-center snap-center transition-all ${
-                        mins === tiempoSeleccionado
-                          ? "text-5xl font-bold text-white"
-                          : "text-2xl text-gray-600"
+                      className={`h-16 flex items-center justify-center snap-center transition-all duration-200 ${
+                        isSelected
+                          ? "text-5xl font-bold text-white scale-110"
+                          : "text-lg text-gray-500"
                       }`}
                     >
-                      {mins === tiempoSeleccionado && <span>{mins} min</span>}
-                      {mins !== tiempoSeleccionado && (
-                        <span className='text-sm'>{mins}</span>
-                      )}
+                      <span>
+                        {mins} {isSelected && "min"}
+                      </span>
                     </div>
                   );
                 })}
-                <div className='h-24'></div>
+                <div className='h-16'></div>
               </div>
             </div>
 

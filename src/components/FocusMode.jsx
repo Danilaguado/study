@@ -118,10 +118,63 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
           // Enviar notificación
           const minutosCompletados = Math.floor(duracionTotal / 60);
-          mostrarNotificacion("¡Focus Mode Completado! 🎉", {
-            body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
-            tag: "focus-complete",
-          });
+
+          // Verificar el estado de las notificaciones
+          if ("Notification" in window) {
+            console.log("Estado de notificaciones:", Notification.permission);
+
+            if (Notification.permission === "granted") {
+              try {
+                // Intentar con la API de Notification directamente
+                const notification = new Notification(
+                  "¡Focus Mode Completado! 🎉",
+                  {
+                    body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
+                    icon: "/icon-192.png",
+                    badge: "/icon-192.png",
+                    tag: "focus-complete",
+                    requireInteraction: false,
+                  }
+                );
+
+                console.log("Notificación enviada:", notification);
+
+                // Auto-cerrar después de 5 segundos
+                setTimeout(() => notification.close(), 5000);
+              } catch (error) {
+                console.error("Error al enviar notificación:", error);
+                // Fallback: intentar con el Service Worker
+                if (
+                  "serviceWorker" in navigator &&
+                  navigator.serviceWorker.controller
+                ) {
+                  navigator.serviceWorker.controller.postMessage({
+                    type: "TIMER_COMPLETE",
+                    minutes: minutosCompletados,
+                  });
+                  console.log("Mensaje enviado al Service Worker");
+                }
+              }
+            } else if (Notification.permission === "default") {
+              // Pedir permisos si no se han dado
+              Notification.requestPermission().then((permission) => {
+                console.log("Permiso solicitado:", permission);
+                if (permission === "granted") {
+                  // Reintentar enviar la notificación
+                  new Notification("¡Focus Mode Completado! 🎉", {
+                    body: `Completaste ${minutosCompletados} minutos de estudio`,
+                    icon: "/icon-192.png",
+                  });
+                }
+              });
+            } else {
+              console.log("Notificaciones bloqueadas por el usuario");
+            }
+          } else {
+            console.log(
+              "Las notificaciones no están soportadas en este navegador"
+            );
+          }
         } else {
           setTiempoRestante(nuevoTiempoRestante);
           setTiempoEstudiado(transcurrido);
@@ -230,7 +283,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 80;
       const targetScroll = (tiempoSeleccionado - 5) * itemHeight;
-      scrollRef.current.scrollTop = targetScroll;
+      scrollRef.current.scrollTo({
+        top: targetScroll,
+        behavior: "smooth",
+      });
     }
   }, [iniciado, completado, tiempoSeleccionado]);
 

@@ -23,15 +23,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   } = useWakeLock();
   const { guardarEstado, cargarEstado, limpiarEstado, calcularTiempoRestante } =
     useTimerPersistence("focusTimer");
-  const { mostrarNotificacion, permiso: notificacionesPermitidas } =
-    useNotifications();
+  const { mostrarNotificacion } = useNotifications();
 
   const totalBarras = 40;
   const barrasCompletadas = Math.floor(
     (1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras
   );
 
-  // Recuperar estado al montar
   useEffect(() => {
     const estadoGuardado = cargarEstado();
     if (estadoGuardado && estadoGuardado.activo) {
@@ -61,7 +59,6 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     }
   }, []);
 
-  // Guardar estado
   useEffect(() => {
     if (iniciado && tiempoInicioTimestamp && !completado) {
       guardarEstado({
@@ -79,37 +76,40 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     completado,
   ]);
 
-  // Actualizar título
   useEffect(() => {
     if (iniciado && !enPausa && !completado) {
-      const mins = Math.ceil(tiempoRestante / 60);
-      document.title = `⏱️ ${mins} min - Study Tracker`;
+      const mins =
+        tiempoRestante >= 60 ? Math.ceil(tiempoRestante / 60) : tiempoRestante;
+      const unidad = tiempoRestante >= 60 ? "min" : "seg";
+      document.title = `⏱️ ${mins} ${unidad} - Study Tracker`;
     } else {
       document.title = "Study Tracker";
     }
   }, [tiempoRestante, iniciado, enPausa, completado]);
 
-  // Timer principal
   useEffect(() => {
     if (!enPausa && iniciado && !completado) {
-      intervaloRef.current = setInterval(() => {
-        setTiempoRestante((prev) => {
-          const nuevoTiempo = prev - 1;
+      const inicioReal = Date.now();
 
-          if (nuevoTiempo <= 1) {
-            clearInterval(intervaloRef.current);
-            finalizarSesion();
-            return 0;
-          }
-          return nuevoTiempo;
-        });
-        setTiempoEstudiado((prev) => prev + 1);
+      intervaloRef.current = setInterval(() => {
+        const transcurrido = Math.floor((Date.now() - inicioReal) / 1000);
+        const duracionTotal = tiempoSeleccionado * 60;
+        const nuevoTiempoRestante = duracionTotal - transcurrido;
+
+        if (nuevoTiempoRestante <= 0) {
+          clearInterval(intervaloRef.current);
+          finalizarSesion();
+          setTiempoRestante(0);
+        } else {
+          setTiempoRestante(nuevoTiempoRestante);
+          setTiempoEstudiado(transcurrido);
+        }
       }, 1000);
     }
     return () => {
       if (intervaloRef.current) clearInterval(intervaloRef.current);
     };
-  }, [enPausa, iniciado, completado]);
+  }, [enPausa, iniciado, completado, tiempoSeleccionado]);
 
   const iniciarSesion = async () => {
     const timestamp = Date.now();
@@ -140,6 +140,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     setCompletado(true);
     setIniciado(false);
     setEnPausa(true);
+
+    setTimeout(() => {
+      setCompletado(true);
+    }, 100);
   };
 
   const guardarYCerrar = () => {
@@ -190,7 +194,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const handleScroll = (e) => {
     const container = e.target;
     const itemHeight = 60;
-    const scrollTop = container.scrollTop;
+    const scrollTop = container.scrollTop + 96;
     const centerIndex = Math.round(scrollTop / itemHeight);
     const nuevoTiempo = centerIndex + 5;
 
@@ -198,11 +202,11 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   };
 
   useEffect(() => {
-    if (scrollRef.current && !iniciado) {
+    if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 60;
       scrollRef.current.scrollTop = (tiempoSeleccionado - 5) * itemHeight;
     }
-  }, [iniciado]);
+  }, [iniciado, completado]);
 
   if (!isOpen) return null;
 
@@ -254,7 +258,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
             <div className='mb-8 relative'>
               <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-10'>
-                <div className='w-full h-16 bg-gradient-to-b from-transparent via-blue-500/20 to-transparent'></div>
+                <div className='w-full h-16 bg-gradient-to-b from-transparent via-blue-500/20 to-transparent rounded-lg'></div>
+              </div>
+
+              <div className='text-center mb-2'>
+                <span className='text-2xl text-gray-400 font-semibold'>
+                  minutos
+                </span>
               </div>
 
               <div
@@ -273,15 +283,16 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                   return (
                     <div
                       key={mins}
-                      className={`h-16 flex items-center justify-center snap-center transition-all duration-200 ${
+                      className={`h-16 flex items-center justify-center snap-center transition-all duration-150 ${
                         isSelected
-                          ? "text-5xl font-bold text-white scale-110"
-                          : "text-lg text-gray-500"
+                          ? "text-5xl font-bold text-white"
+                          : "text-xl text-gray-600"
                       }`}
+                      style={{
+                        transform: isSelected ? "scale(1)" : "scale(0.8)",
+                      }}
                     >
-                      <span>
-                        {mins} {isSelected && "min"}
-                      </span>
+                      <span>{mins}</span>
                     </div>
                   );
                 })}
@@ -339,9 +350,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
               <div className='absolute inset-0 flex flex-col items-center justify-center'>
                 <div className='text-6xl font-bold text-white mb-2'>
-                  {Math.ceil(tiempoRestante / 60)}
+                  {tiempoRestante >= 60
+                    ? Math.ceil(tiempoRestante / 60)
+                    : tiempoRestante}
                 </div>
-                <div className='text-xl text-gray-400'>min</div>
+                <div className='text-xl text-gray-400'>
+                  {tiempoRestante >= 60 ? "min" : "seg"}
+                </div>
               </div>
             </div>
 

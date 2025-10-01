@@ -274,7 +274,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     const scrollTop = container.scrollTop;
 
     const centerIndex = Math.round(scrollTop / itemHeight);
-    const nuevoTiempo = Math.max(5, Math.min(60, centerIndex + 5));
+    const nuevoTiempo = Math.max(1, Math.min(60, centerIndex + 1));
 
     setTiempoSeleccionado(nuevoTiempo);
   };
@@ -282,7 +282,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   useEffect(() => {
     if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 80;
-      const targetScroll = (tiempoSeleccionado - 5) * itemHeight;
+      const targetScroll = (tiempoSeleccionado - 1) * itemHeight;
       scrollRef.current.scrollTo({
         top: targetScroll,
         behavior: "smooth",
@@ -360,8 +360,8 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                 }}
               >
                 <div className='h-28'></div>
-                {[...Array(56)].map((_, i) => {
-                  const mins = i + 5;
+                {[...Array(60)].map((_, i) => {
+                  const mins = i + 1;
                   const isSelected = mins === tiempoSeleccionado;
                   return (
                     <div

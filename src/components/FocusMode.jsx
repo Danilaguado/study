@@ -194,22 +194,29 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const handleScroll = (e) => {
     const container = e.target;
     const itemHeight = 80;
-    const containerHeight = container.clientHeight;
+    const containerHeight = 256;
     const scrollTop = container.scrollTop;
-    const centerOffset = containerHeight / 2 - itemHeight / 2;
-    const centerIndex = Math.round((scrollTop + centerOffset) / itemHeight);
-    const nuevoTiempo = centerIndex + 5;
+    const paddingTop = 112;
 
-    setTiempoSeleccionado(Math.max(5, Math.min(60, nuevoTiempo)));
+    const centerPosition = scrollTop + containerHeight / 2 - paddingTop;
+    const centerIndex = Math.round(centerPosition / itemHeight);
+    const nuevoTiempo = Math.max(5, Math.min(60, centerIndex + 5));
+
+    setTiempoSeleccionado(nuevoTiempo);
   };
 
   useEffect(() => {
     if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 80;
-      const containerHeight = scrollRef.current.clientHeight;
-      const centerOffset = containerHeight / 2 - itemHeight / 2;
-      scrollRef.current.scrollTop =
-        (tiempoSeleccionado - 5) * itemHeight - centerOffset;
+      const containerHeight = 256;
+      const paddingTop = 112;
+
+      const targetScroll =
+        (tiempoSeleccionado - 5) * itemHeight -
+        containerHeight / 2 +
+        paddingTop +
+        itemHeight / 2;
+      scrollRef.current.scrollTop = targetScroll;
     }
   }, [iniciado, completado]);
 
@@ -266,6 +273,12 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                 <div className='w-full h-20 bg-gradient-to-b from-transparent via-blue-500/20 to-transparent rounded-lg'></div>
               </div>
 
+              <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-20'>
+                <div className='flex items-baseline gap-2 ml-32'>
+                  <span className='text-3xl text-white font-semibold'>min</span>
+                </div>
+              </div>
+
               <div
                 ref={scrollRef}
                 onScroll={handleScroll}
@@ -275,7 +288,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                   msOverflowStyle: "none",
                 }}
               >
-                <div className='h-24'></div>
+                <div className='h-28'></div>
                 {[...Array(56)].map((_, i) => {
                   const mins = i + 5;
                   const isSelected = mins === tiempoSeleccionado;
@@ -284,22 +297,19 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
                       key={mins}
                       className='h-20 flex items-center justify-center snap-center'
                     >
-                      <div
-                        className={`flex items-baseline gap-2 transition-all duration-200 ${
+                      <span
+                        className={`transition-all duration-200 ${
                           isSelected
                             ? "text-6xl font-bold text-white"
                             : "text-2xl text-gray-600"
                         }`}
                       >
-                        <span>{mins}</span>
-                        <span className={isSelected ? "text-3xl" : "text-lg"}>
-                          min
-                        </span>
-                      </div>
+                        {mins}
+                      </span>
                     </div>
                   );
                 })}
-                <div className='h-24'></div>
+                <div className='h-28'></div>
               </div>
             </div>
 

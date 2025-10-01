@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Pause, Play, X, CheckCircle, RefreshCw } from "lucide-react";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { useTimerPersistence } from "../hooks/useTimerPersistence";
@@ -88,7 +88,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   }, [tiempoRestante, iniciado, enPausa, completado]);
 
   useEffect(() => {
-    if (!enPausa && iniciado && !completado) {
+    if (!enPausa && iniciado && !completado && tiempoInicioTimestamp) {
       intervaloRef.current = setInterval(() => {
         const ahora = Date.now();
         const transcurrido = Math.floor((ahora - tiempoInicioTimestamp) / 1000);
@@ -96,7 +96,6 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
         const nuevoTiempoRestante = duracionTotal - transcurrido;
 
         if (nuevoTiempoRestante <= 0) {
-          clearInterval(intervaloRef.current);
           setTiempoRestante(0);
           setTiempoEstudiado(duracionTotal);
           finalizarSesion();
@@ -104,10 +103,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
           setTiempoRestante(nuevoTiempoRestante);
           setTiempoEstudiado(transcurrido);
         }
-      }, 1000);
+      }, 100); // Usar 100ms para detectar más rápido el fin
     }
     return () => {
-      if (intervaloRef.current) clearInterval(intervaloRef.current);
+      if (intervaloRef.current) {
+        clearInterval(intervaloRef.current);
+        intervaloRef.current = null;
+      }
     };
   }, [
     enPausa,
@@ -115,6 +117,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     completado,
     tiempoSeleccionado,
     tiempoInicioTimestamp,
+    finalizarSesion,
   ]);
 
   const iniciarSesion = async () => {
@@ -132,10 +135,22 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     setEnPausa(!enPausa);
   };
 
-  const finalizarSesion = async () => {
+  const finalizarSesion = useCallback(() => {
     const minutosEstudiados = Math.floor(tiempoSeleccionado);
 
-    await liberarWakeLock();
+    // Limpiar el intervalo inmediatamente
+    if (intervaloRef.current) {
+      clearInterval(intervaloRef.current);
+      intervaloRef.current = null;
+    }
+
+    // Actualizar estado inmediatamente
+    setCompletado(true);
+    setIniciado(false);
+    setEnPausa(true);
+
+    // Liberar wake lock y limpiar estado
+    liberarWakeLock();
     limpiarEstado();
 
     // Enviar notificación push
@@ -146,20 +161,22 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
       vibrate: [200, 100, 200, 100, 200],
     });
 
-    // Reproducir sonido de notificación si es posible
+    // Reproducir sonido de notificación
     try {
       const audio = new Audio(
         "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLYiTcIG2m98OScTgwOUarm7blmFwU7k9n1unEiBC13yO/eizEIHWq+8+OWT"
       );
-      audio.play();
+      audio.play().catch((e) => console.log("No se pudo reproducir sonido"));
     } catch (e) {
-      console.log("No se pudo reproducir sonido");
+      console.log("Error al crear audio");
     }
-
-    setCompletado(true);
-    setIniciado(false);
-    setEnPausa(true);
-  };
+  }, [
+    tiempoSeleccionado,
+    categoriaActual,
+    liberarWakeLock,
+    limpiarEstado,
+    mostrarNotificacion,
+  ]);
 
   const guardarYCerrar = () => {
     const minutosEstudiados = Math.floor(tiempoEstudiado / 60);

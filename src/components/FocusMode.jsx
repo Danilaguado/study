@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Pause, Play, X, CheckCircle, RefreshCw } from "lucide-react";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { useTimerPersistence } from "../hooks/useTimerPersistence";
@@ -30,6 +30,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     (1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras
   );
 
+  // Cargar estado guardado al montar
   useEffect(() => {
     const estadoGuardado = cargarEstado();
     if (estadoGuardado && estadoGuardado.activo) {
@@ -59,6 +60,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     }
   }, []);
 
+  // Guardar estado cuando cambia
   useEffect(() => {
     if (iniciado && tiempoInicioTimestamp && !completado) {
       guardarEstado({
@@ -76,6 +78,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     completado,
   ]);
 
+  // Actualizar título de la página
   useEffect(() => {
     if (iniciado && !enPausa && !completado) {
       const mins =
@@ -87,24 +90,61 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     }
   }, [tiempoRestante, iniciado, enPausa, completado]);
 
+  // Timer principal
   useEffect(() => {
     if (!enPausa && iniciado && !completado && tiempoInicioTimestamp) {
-      intervaloRef.current = setInterval(() => {
+      const checkInterval = setInterval(() => {
         const ahora = Date.now();
         const transcurrido = Math.floor((ahora - tiempoInicioTimestamp) / 1000);
         const duracionTotal = tiempoSeleccionado * 60;
         const nuevoTiempoRestante = duracionTotal - transcurrido;
 
         if (nuevoTiempoRestante <= 0) {
+          // Detener el intervalo
+          clearInterval(checkInterval);
+
+          // Actualizar estados finales
           setTiempoRestante(0);
           setTiempoEstudiado(duracionTotal);
-          finalizarSesion();
+
+          // Marcar como completado
+          setCompletado(true);
+          setIniciado(false);
+          setEnPausa(true);
+
+          // Limpiar recursos
+          liberarWakeLock();
+          limpiarEstado();
+
+          // Enviar notificación
+          const minutosCompletados = Math.floor(duracionTotal / 60);
+          mostrarNotificacion("¡Focus Mode Completado! 🎉", {
+            body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
+            tag: "focus-complete",
+            requireInteraction: true,
+            vibrate: [200, 100, 200, 100, 200],
+          });
+
+          // Reproducir sonido
+          try {
+            const audio = new Audio(
+              "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLYiTcIG2m98OScTgwOUarm7blmFwU7k9n1unEiBC13yO/eizEIHWq+8+OWT"
+            );
+            audio
+              .play()
+              .catch((e) => console.log("No se pudo reproducir sonido"));
+          } catch (e) {
+            console.log("Error al crear audio");
+          }
         } else {
           setTiempoRestante(nuevoTiempoRestante);
           setTiempoEstudiado(transcurrido);
         }
-      }, 100); // Usar 100ms para detectar más rápido el fin
+      }, 1000);
+
+      intervaloRef.current = checkInterval;
     }
+
     return () => {
       if (intervaloRef.current) {
         clearInterval(intervaloRef.current);
@@ -117,7 +157,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     completado,
     tiempoSeleccionado,
     tiempoInicioTimestamp,
-    finalizarSesion,
+    categoriaActual,
+    liberarWakeLock,
+    limpiarEstado,
+    mostrarNotificacion,
   ]);
 
   const iniciarSesion = async () => {
@@ -135,49 +178,6 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     setEnPausa(!enPausa);
   };
 
-  const finalizarSesion = useCallback(() => {
-    const minutosEstudiados = Math.floor(tiempoSeleccionado);
-
-    // Limpiar el intervalo inmediatamente
-    if (intervaloRef.current) {
-      clearInterval(intervaloRef.current);
-      intervaloRef.current = null;
-    }
-
-    // Actualizar estado inmediatamente
-    setCompletado(true);
-    setIniciado(false);
-    setEnPausa(true);
-
-    // Liberar wake lock y limpiar estado
-    liberarWakeLock();
-    limpiarEstado();
-
-    // Enviar notificación push
-    mostrarNotificacion("¡Focus Mode Completado! 🎉", {
-      body: `Completaste ${minutosEstudiados} minutos de estudio en ${categoriaActual}`,
-      tag: "focus-complete",
-      requireInteraction: true,
-      vibrate: [200, 100, 200, 100, 200],
-    });
-
-    // Reproducir sonido de notificación
-    try {
-      const audio = new Audio(
-        "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLYiTcIG2m98OScTgwOUarm7blmFwU7k9n1unEiBC13yO/eizEIHWq+8+OWT"
-      );
-      audio.play().catch((e) => console.log("No se pudo reproducir sonido"));
-    } catch (e) {
-      console.log("Error al crear audio");
-    }
-  }, [
-    tiempoSeleccionado,
-    categoriaActual,
-    liberarWakeLock,
-    limpiarEstado,
-    mostrarNotificacion,
-  ]);
-
   const guardarYCerrar = () => {
     const minutosEstudiados = Math.floor(tiempoEstudiado / 60);
     if (minutosEstudiados > 0) {
@@ -194,10 +194,16 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     setCompletado(false);
     setTiempoEstudiado(0);
     setTiempoRestante(tiempoSeleccionado * 60);
+    setTiempoInicioTimestamp(null);
+    setIniciado(false);
+    setEnPausa(true);
   };
 
   const cerrarModal = async () => {
-    if (intervaloRef.current) clearInterval(intervaloRef.current);
+    if (intervaloRef.current) {
+      clearInterval(intervaloRef.current);
+      intervaloRef.current = null;
+    }
     await liberarWakeLock();
     limpiarEstado();
 
@@ -228,7 +234,6 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     const itemHeight = 80;
     const scrollTop = container.scrollTop;
 
-    // Calcular qué elemento está en el centro
     const centerIndex = Math.round(scrollTop / itemHeight);
     const nuevoTiempo = Math.max(5, Math.min(60, centerIndex + 5));
 
@@ -238,12 +243,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   useEffect(() => {
     if (scrollRef.current && !iniciado && !completado) {
       const itemHeight = 80;
-
-      // Posicionar el scroll para que el tiempo seleccionado esté en el centro
       const targetScroll = (tiempoSeleccionado - 5) * itemHeight;
       scrollRef.current.scrollTop = targetScroll;
     }
-  }, [iniciado, completado]);
+  }, [iniciado, completado, tiempoSeleccionado]);
 
   if (!isOpen) return null;
 

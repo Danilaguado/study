@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, Calendar, Target, Award, Download, Upload, Plus, X, FolderOpen, ChevronDown, ChevronUp, Play, Pause, Square, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Calendar, Target, Award, Download, Upload, Plus, X, FolderOpen, ChevronDown, ChevronUp, Focus } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import FocusMode from './FocusMode';
+import { obtenerDiaSemana } from '../utils/dateUtils';
+import { calcularMetricas } from '../utils/metricsCalculator';
 
 const StudyTracker = () => {
   const [categorias, setCategorias] = useState([]);
@@ -11,23 +14,14 @@ const StudyTracker = () => {
   const [nuevaCategoria, setNuevaCategoria] = useState('');
   const [registroAbierto, setRegistroAbierto] = useState(false);
   const [diasTendencia, setDiasTendencia] = useState(7);
-  const [mostrarPomodoro, setMostrarPomodoro] = useState(false);
-  const [tiempoPomodoro] = useState(1800);
-  const [tiempoPausa] = useState(600);
-  const [tiempoActual, setTiempoActual] = useState(1200);
-  const [enPausa, setEnPausa] = useState(false);
-  const [pomodoroActivo, setPomodoroActivo] = useState(false);
-  const [cicloPomodoro, setCicloPomodoro] = useState(1);
-  const [totalCiclos] = useState(2);
-  const [minutosAcumulados, setMinutosAcumulados] = useState(0);
-  const [horaInicioPomodoro, setHoraInicioPomodoro] = useState(null);
+  const [mostrarFocusMode, setMostrarFocusMode] = useState(false);
+  const [mostrarMasRegistros, setMostrarMasRegistros] = useState(false);
   const [nuevoRegistro, setNuevoRegistro] = useState({
     fecha: new Date().toISOString().split('T')[0],
     realizado: true,
     valor: ''
   });
   const fileInputRef = useRef(null);
-  const intervaloRef = useRef(null);
 
   useEffect(() => {
     const categoriasGuardadas = localStorage.getItem('categorias');
@@ -56,114 +50,42 @@ const StudyTracker = () => {
     }
   }, [registros]);
 
-  useEffect(() => {
-    if (pomodoroActivo && !enPausa) {
-      intervaloRef.current = setInterval(() => {
-        setTiempoActual(prev => {
-          if (prev <= 1) {
-            clearInterval(intervaloRef.current);
-            manejarFinCiclo();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (intervaloRef.current) clearInterval(intervaloRef.current);
-    };
-  }, [pomodoroActivo, enPausa]);
-
-  const obtenerDiaSemana = (fecha) => {
-    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    return dias[new Date(fecha + 'T00:00:00').getDay()];
-  };
-
-  const iniciarPomodoro = () => {
-    if (!categoriaActual) {
-      alert('Selecciona una categoría primero');
-      return;
-    }
-    setMostrarPomodoro(true);
-    setPomodoroActivo(true);
-    setEnPausa(false);
-    setTiempoActual(1800);
-    setCicloPomodoro(1);
-    setMinutosAcumulados(0);
-    setHoraInicioPomodoro(new Date().getHours());
-  };
-
-  const pausarReanudarPomodoro = () => {
-    if (!enPausa) {
-      clearInterval(intervaloRef.current);
-      setEnPausa(true);
-      setPomodoroActivo(false);
-      const pausaInicio = tiempoPausa;
-      setTiempoActual(pausaInicio);
-      
-      const pausaInterval = setInterval(() => {
-        setTiempoActual(prev => {
-          if (prev <= 1) {
-            clearInterval(pausaInterval);
-            setEnPausa(false);
-            setPomodoroActivo(true);
-            setTiempoActual(tiempoPomodoro);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-  };
-
-  const manejarFinCiclo = () => {
-    const minutosEstudiados = tiempoPomodoro / 60;
-    setMinutosAcumulados(prev => prev + minutosEstudiados);
-
-    if (cicloPomodoro < totalCiclos) {
-      setCicloPomodoro(prev => prev + 1);
-      setTiempoActual(tiempoPomodoro);
-      setPomodoroActivo(true);
-    } else {
-      finalizarPomodoro();
-    }
-  };
-
-  const finalizarPomodoro = () => {
-    setPomodoroActivo(false);
-    if (intervaloRef.current) clearInterval(intervaloRef.current);
-  };
-
-  const registrarEstudioPomodoro = () => {
-    const registro = {
-      fecha: new Date().toISOString().split('T')[0],
-      realizado: true,
-      valor: Math.round(minutosAcumulados),
-      diaSemana: obtenerDiaSemana(new Date().toISOString().split('T')[0]),
-      horaInicio: horaInicioPomodoro,
-      id: Date.now()
-    };
-
+  const handleFocusComplete = (minutosEstudiados) => {
+    const hoy = new Date().toISOString().split('T')[0];
+    const horaActual = new Date().getHours();
     const registrosCategoria = registros[categoriaActual] || [];
-    const nuevosRegistrosCategoria = [...registrosCategoria, registro].sort((a, b) => 
-      new Date(a.fecha) - new Date(b.fecha)
-    );
+    
+    const registroHoy = registrosCategoria.find(r => r.fecha === hoy);
 
-    setRegistros({
-      ...registros,
-      [categoriaActual]: nuevosRegistrosCategoria
-    });
+    if (registroHoy) {
+      const registrosActualizados = registrosCategoria.map(r => 
+        r.fecha === hoy 
+          ? { ...r, valor: r.valor + minutosEstudiados }
+          : r
+      );
+      setRegistros({
+        ...registros,
+        [categoriaActual]: registrosActualizados
+      });
+    } else {
+      const nuevoRegistroFocus = {
+        fecha: hoy,
+        realizado: true,
+        valor: minutosEstudiados,
+        diaSemana: obtenerDiaSemana(hoy),
+        horaInicio: horaActual,
+        id: Date.now()
+      };
 
-    setMostrarPomodoro(false);
-    setMinutosAcumulados(0);
-    setCicloPomodoro(1);
-    setEnPausa(false);
-  };
+      const nuevosRegistrosCategoria = [...registrosCategoria, nuevoRegistroFocus].sort((a, b) => 
+        new Date(a.fecha) - new Date(b.fecha)
+      );
 
-  const formatearTiempo = (segundos) => {
-    const mins = Math.floor(segundos / 60);
-    const secs = segundos % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      setRegistros({
+        ...registros,
+        [categoriaActual]: nuevosRegistrosCategoria
+      });
+    }
   };
 
   const agregarCategoria = () => {
@@ -306,91 +228,7 @@ const StudyTracker = () => {
     event.target.value = '';
   };
 
-  const calcularMetricas = () => {
-    if (!categoriaActual || !registros[categoriaActual] || registros[categoriaActual].length === 0) {
-      return null;
-    }
-
-    const regs = registros[categoriaActual];
-    const diasRealizados = regs.filter(r => r.realizado).length;
-    const diasTotales = regs.length;
-    const tasaCumplimiento = (diasRealizados / diasTotales) * 100;
-
-    const ultimosN = regs.slice(-diasTendencia);
-    const valoresUltimosN = ultimosN.filter(r => r.realizado).map(r => r.valor);
-    const promedioUltimosN = valoresUltimosN.length > 0 
-      ? valoresUltimosN.reduce((a, b) => a + b, 0) / valoresUltimosN.length 
-      : 0;
-
-    const calcularTendencia = () => {
-      if (valoresUltimosN.length < 3) return 'neutral';
-      const mitad = Math.floor(valoresUltimosN.length / 2);
-      const primera = valoresUltimosN.slice(0, mitad);
-      const segunda = valoresUltimosN.slice(mitad);
-      
-      const promPrimera = primera.reduce((a, b) => a + b, 0) / primera.length;
-      const promSegunda = segunda.reduce((a, b) => a + b, 0) / segunda.length;
-      
-      const diferencia = ((promSegunda - promPrimera) / promPrimera) * 100;
-      
-      if (diferencia > 10) return 'subiendo';
-      if (diferencia < -10) return 'bajando';
-      return 'estable';
-    };
-
-    const tendencia = calcularTendencia();
-
-    const calcularMinutosParaEstable = () => {
-      if (tendencia === 'bajando') {
-        return Math.ceil(promedioUltimosN * 1.3);
-      } else if (tendencia === 'estable') {
-        return Math.ceil(promedioUltimosN * 1.1);
-      }
-      return Math.ceil(promedioUltimosN);
-    };
-
-    let rachaActual = 0;
-    for (let i = regs.length - 1; i >= 0; i--) {
-      if (regs[i].realizado) rachaActual++;
-      else break;
-    }
-
-    const factorRacha = Math.min(rachaActual * 5, 30);
-    const factorCumplimiento = tasaCumplimiento * 0.5;
-    const factorTendencia = tendencia === 'subiendo' ? 15 : tendencia === 'bajando' ? -15 : 0;
-    
-    let probabilidadManana = 50 + factorRacha + factorCumplimiento + factorTendencia;
-    probabilidadManana = Math.max(5, Math.min(95, probabilidadManana));
-
-    const valorSugerido = calcularMinutosParaEstable();
-    const probabilidadCompletar = Math.min(95, tasaCumplimiento);
-
-    const horasFrecuencia = {};
-    regs.filter(r => r.realizado && r.horaInicio != null).forEach(r => {
-      horasFrecuencia[r.horaInicio] = (horasFrecuencia[r.horaInicio] || 0) + r.valor;
-    });
-
-    const mejorHora = Object.keys(horasFrecuencia).length > 0
-      ? Object.keys(horasFrecuencia).reduce((a, b) => 
-          horasFrecuencia[a] > horasFrecuencia[b] ? a : b
-        )
-      : null;
-
-    return {
-      diasRealizados,
-      diasTotales,
-      tasaCumplimiento: tasaCumplimiento.toFixed(1),
-      promedioUltimosN: promedioUltimosN.toFixed(0),
-      tendencia,
-      rachaActual,
-      probabilidadManana: probabilidadManana.toFixed(0),
-      valorSugerido,
-      probabilidadCompletar: probabilidadCompletar.toFixed(0),
-      mejorHora: mejorHora ? `${mejorHora}:00` : 'N/A'
-    };
-  };
-
-  const metricas = calcularMetricas();
+  const metricas = calcularMetricas(registros, categoriaActual, diasTendencia);
 
   const getTendenciaIcon = (tendencia) => {
     if (tendencia === 'subiendo') return <TrendingUp className="text-green-500" />;
@@ -406,12 +244,13 @@ const StudyTracker = () => {
 
   const datosGrafico = categoriaActual && registros[categoriaActual]
     ? registros[categoriaActual].filter(r => r.realizado).map(r => ({
-        fecha: new Date(r.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
+        fecha: new Date(r.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
         minutos: r.valor
       }))
     : [];
 
   const registrosActuales = categoriaActual ? (registros[categoriaActual] || []) : [];
+  const registrosMostrar = mostrarMasRegistros ? registrosActuales : registrosActuales.slice(-10);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -421,77 +260,12 @@ const StudyTracker = () => {
         </h1>
         <p className="text-center text-gray-600 mb-8">Analiza tus hábitos de estudio</p>
 
-        {mostrarPomodoro && (
-          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-12 max-w-2xl w-full shadow-2xl">
-              {!pomodoroActivo && cicloPomodoro > totalCiclos ? (
-                <div className="text-center">
-                  <h2 className="text-5xl font-bold text-green-600 mb-6">🎉 ¡Felicitaciones!</h2>
-                  <p className="text-2xl mb-6">Completaste {totalCiclos} ciclos</p>
-                  <p className="text-4xl font-bold text-indigo-900 mb-8">
-                    {Math.round(minutosAcumulados)} minutos
-                  </p>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={registrarEstudioPomodoro}
-                      className="flex-1 bg-green-600 text-white px-8 py-4 rounded-xl hover:bg-green-700 font-bold text-lg"
-                    >
-                      Registrar
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCicloPomodoro(1);
-                        setTiempoActual(1800);
-                        setPomodoroActivo(true);
-                        setEnPausa(false);
-                      }}
-                      className="flex-1 bg-indigo-600 text-white px-8 py-4 rounded-xl hover:bg-indigo-700 font-bold text-lg"
-                    >
-                      Otro Pomodoro
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <h2 className="text-4xl font-bold text-indigo-900 mb-6 text-center">
-                    {enPausa ? '⏸️ PAUSA' : '⏱️ Pomodoro'}
-                  </h2>
-                  <p className="text-center text-gray-600 mb-4 text-xl">
-                    Ciclo {cicloPomodoro} / {totalCiclos}
-                  </p>
-                  <div className="text-8xl font-bold text-center text-indigo-900 mb-8">
-                    {formatearTiempo(tiempoActual)}
-                  </div>
-                  <div className="flex gap-4 mb-6">
-                    <button
-                      onClick={pausarReanudarPomodoro}
-                      disabled={enPausa}
-                      className="flex-1 bg-yellow-500 text-white px-8 py-4 rounded-xl hover:bg-yellow-600 font-bold text-lg flex items-center justify-center gap-3 disabled:bg-gray-400"
-                    >
-                      <Pause size={24} />
-                      Pausa
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPomodoroActivo(false);
-                        setMostrarPomodoro(false);
-                        setEnPausa(false);
-                        if (intervaloRef.current) clearInterval(intervaloRef.current);
-                      }}
-                      className="flex-1 bg-red-600 text-white px-8 py-4 rounded-xl hover:bg-red-700 font-bold text-lg flex items-center justify-center gap-3"
-                    >
-                      <Square size={24} />
-                      Detener
-                    </button>
-                  </div>
-                  <p className="text-center text-lg text-gray-600">
-                    Acumulado: {Math.round(minutosAcumulados)} min
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-        )}
+        <FocusMode
+          isOpen={mostrarFocusMode}
+          onClose={() => setMostrarFocusMode(false)}
+          onComplete={handleFocusComplete}
+          categoriaActual={categoriaActual}
+        />
 
         <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
           <div className="flex flex-wrap gap-3 justify-center">
@@ -588,15 +362,15 @@ const StudyTracker = () => {
           <>
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <h2 className="text-xl font-semibold text-indigo-800 mb-4 flex items-center gap-2">
-                <Clock size={24} />
+                <Focus size={24} />
                 Iniciar Estudio
               </h2>
               <button
-                onClick={iniciarPomodoro}
+                onClick={() => setMostrarFocusMode(true)}
                 className="w-full bg-indigo-600 text-white px-6 py-4 rounded-lg hover:bg-indigo-700 font-bold text-lg flex items-center justify-center gap-3"
               >
-                <Play size={24} />
-                Pomodoro (2 × 30 min)
+                <Focus size={24} />
+                Focus Mode
               </button>
             </div>
 
@@ -711,7 +485,7 @@ const StudyTracker = () => {
                     <div className="bg-purple-50 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-medium text-gray-600">Mejor Hora</h4>
-                        <Clock className="text-purple-600" size={20} />
+                        <Calendar className="text-purple-600" size={20} />
                       </div>
                       <p className="text-2xl font-bold text-purple-600">{metricas.mejorHora}</p>
                     </div>
@@ -767,9 +541,9 @@ const StudyTracker = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {[...registrosActuales].reverse().map((registro) => (
+                          {[...registrosMostrar].reverse().map((registro) => (
                             <tr key={registro.id} className="border-b hover:bg-indigo-50">
-                              <td className="p-3">{new Date(registro.fecha).toLocaleDateString('es-ES')}</td>
+                              <td className="p-3">{new Date(registro.fecha + 'T00:00:00').toLocaleDateString('es-ES')}</td>
                               <td className="p-3 text-sm">{registro.diaSemana}</td>
                               <td className="p-3">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -792,6 +566,16 @@ const StudyTracker = () => {
                         </tbody>
                       </table>
                     </div>
+                    {registrosActuales.length > 10 && (
+                      <div className="mt-4 text-center">
+                        <button
+                          onClick={() => setMostrarMasRegistros(!mostrarMasRegistros)}
+                          className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                        >
+                          {mostrarMasRegistros ? 'Mostrar menos' : `Ver ${registrosActuales.length - 10} más...`}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

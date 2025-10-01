@@ -89,17 +89,17 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   useEffect(() => {
     if (!enPausa && iniciado && !completado) {
-      const inicioReal = Date.now();
-
       intervaloRef.current = setInterval(() => {
-        const transcurrido = Math.floor((Date.now() - inicioReal) / 1000);
+        const ahora = Date.now();
+        const transcurrido = Math.floor((ahora - tiempoInicioTimestamp) / 1000);
         const duracionTotal = tiempoSeleccionado * 60;
         const nuevoTiempoRestante = duracionTotal - transcurrido;
 
         if (nuevoTiempoRestante <= 0) {
           clearInterval(intervaloRef.current);
-          finalizarSesion();
           setTiempoRestante(0);
+          setTiempoEstudiado(duracionTotal);
+          finalizarSesion();
         } else {
           setTiempoRestante(nuevoTiempoRestante);
           setTiempoEstudiado(transcurrido);
@@ -109,7 +109,13 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     return () => {
       if (intervaloRef.current) clearInterval(intervaloRef.current);
     };
-  }, [enPausa, iniciado, completado, tiempoSeleccionado]);
+  }, [
+    enPausa,
+    iniciado,
+    completado,
+    tiempoSeleccionado,
+    tiempoInicioTimestamp,
+  ]);
 
   const iniciarSesion = async () => {
     const timestamp = Date.now();
@@ -127,23 +133,32 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   };
 
   const finalizarSesion = async () => {
-    const minutosEstudiados = Math.floor(tiempoEstudiado / 60);
+    const minutosEstudiados = Math.floor(tiempoSeleccionado);
 
     await liberarWakeLock();
     limpiarEstado();
 
+    // Enviar notificación push
     mostrarNotificacion("¡Focus Mode Completado! 🎉", {
       body: `Completaste ${minutosEstudiados} minutos de estudio en ${categoriaActual}`,
       tag: "focus-complete",
+      requireInteraction: true,
+      vibrate: [200, 100, 200, 100, 200],
     });
+
+    // Reproducir sonido de notificación si es posible
+    try {
+      const audio = new Audio(
+        "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLYiTcIG2m98OScTgwOUarm7blmFwU7k9n1unEiBC13yO/eizEIHWq+8+OWT"
+      );
+      audio.play();
+    } catch (e) {
+      console.log("No se pudo reproducir sonido");
+    }
 
     setCompletado(true);
     setIniciado(false);
     setEnPausa(true);
-
-    setTimeout(() => {
-      setCompletado(true);
-    }, 100);
   };
 
   const guardarYCerrar = () => {
@@ -267,8 +282,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
               </div>
 
               <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-20'>
-                <div className='flex items-baseline gap-2 ml-32'>
-                  <span className='text-3xl text-white font-semibold'>min</span>
+                <div className='flex items-baseline gap-2'>
+                  <span className='text-3xl text-white font-semibold ml-16'>
+                    min
+                  </span>
                 </div>
               </div>
 

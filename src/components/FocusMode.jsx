@@ -7,22 +7,62 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
   const [enPausa, setEnPausa] = useState(true);
   const [iniciado, setIniciado] = useState(false);
   const [tiempoEstudiado, setTiempoEstudiado] = useState(0);
+  const [notificacionesPermitidas, setNotificacionesPermitidas] = useState(false);
   const intervaloRef = useRef(null);
   const scrollRef = useRef(null);
 
   const totalBarras = 40;
   const barrasCompletadas = Math.floor((1 - tiempoRestante / (tiempoSeleccionado * 60)) * totalBarras);
 
+  // Solicitar permisos de notificación
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then((permission) => {
+        setNotificacionesPermitidas(permission === 'granted');
+      });
+    } else if (Notification.permission === 'granted') {
+      setNotificacionesPermitidas(true);
+    }
+  }, []);
+
+  // Actualizar título de la página
+  useEffect(() => {
+    if (iniciado && !enPausa) {
+      const mins = Math.ceil(tiempoRestante / 60);
+      document.title = `⏱️ ${mins} min - Study Tracker`;
+    } else {
+      document.title = 'Study Tracker';
+    }
+  }, [tiempoRestante, iniciado, enPausa]);
+
+  // Enviar actualizaciones al Service Worker
+  const enviarMensajeSW = (tipo, datos) => {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: tipo,
+        ...datos
+      });
+    }
+  };
+
   useEffect(() => {
     if (!enPausa && iniciado) {
       intervaloRef.current = setInterval(() => {
         setTiempoRestante(prev => {
-          if (prev <= 1) {
+          const nuevoTiempo = prev - 1;
+          
+          // Actualizar badge cada minuto
+          if (nuevoTiempo % 60 === 0) {
+            const minutosRestantes = Math.ceil(nuevoTiempo / 60);
+            enviarMensajeSW('TIMER_UPDATE', { minutes: minutosRestantes });
+          }
+
+          if (nuevoTiempo <= 1) {
             clearInterval(intervaloRef.current);
             finalizarSesion(tiempoSeleccionado);
             return 0;
           }
-          return prev - 1;
+          return nuevoTiempo;
         });
         setTiempoEstudiado(prev => prev + 1);
       }, 1000);
@@ -44,6 +84,19 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   const finalizarSesion = (minutosEstudiados) => {
     const minutos = Math.floor(minutosEstudiados || tiempoEstudiado / 60);
+    
+    // Notificar al Service Worker
+    enviarMensajeSW('TIMER_COMPLETE', { minutes: minutos });
+
+    // Mostrar notificación si están permitidas
+    if (notificacionesPermitidas && 'Notification' in window) {
+      new Notification('¡Focus Mode Completado!', {
+        body: `Completaste ${minutos} minutos de estudio en ${categoriaActual}`,
+        icon: '/icon-192.png',
+        vibrate: [200, 100, 200]
+      });
+    }
+
     if (minutos > 0) {
       onComplete(minutos);
     }
@@ -52,11 +105,18 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
 
   const cerrarModal = () => {
     if (intervaloRef.current) clearInterval(intervaloRef.current);
+    document.title = 'Study Tracker';
     setIniciado(false);
     setEnPausa(true);
     setTiempoRestante(30 * 60);
     setTiempoSeleccionado(30);
     setTiempoEstudiado(0);
+    
+    // Limpiar badge
+    if (navigator.clearAppBadge) {
+      navigator.clearAppBadge();
+    }
+    
     onClose();
   };
 
@@ -71,12 +131,6 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     } else {
       cerrarModal();
     }
-  };
-
-  const formatearTiempo = (segundos) => {
-    const mins = Math.floor(segundos / 60);
-    const secs = segundos % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleScroll = (e) => {

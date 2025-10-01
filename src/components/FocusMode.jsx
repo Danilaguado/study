@@ -1,6 +1,3 @@
-const togglePausa = () => {
-  setEnPausa(!enPausa);
-};
 import React, { useState, useEffect, useRef } from "react";
 import { Pause, Play, X, CheckCircle, RefreshCw } from "lucide-react";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -191,6 +188,10 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
     setTiempoRestante(tiempoSeleccionado * 60);
     setTiempoEstudiado(0);
     await solicitarWakeLock();
+  };
+
+  const togglePausa = () => {
+    setEnPausa(!enPausa);
   };
 
   const solicitarPermisoNotificaciones = async () => {

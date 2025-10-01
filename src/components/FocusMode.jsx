@@ -121,21 +121,7 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
           mostrarNotificacion("¡Focus Mode Completado! 🎉", {
             body: `Completaste ${minutosCompletados} minutos de estudio en ${categoriaActual}`,
             tag: "focus-complete",
-            requireInteraction: true,
-            vibrate: [200, 100, 200, 100, 200],
           });
-
-          // Reproducir sonido
-          try {
-            const audio = new Audio(
-              "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLYiTcIG2m98OScTgwOUarm7blmFwU7k9n1unEiBC13yO/eizEIHWq+8+OWT"
-            );
-            audio
-              .play()
-              .catch((e) => console.log("No se pudo reproducir sonido"));
-          } catch (e) {
-            console.log("Error al crear audio");
-          }
         } else {
           setTiempoRestante(nuevoTiempoRestante);
           setTiempoEstudiado(transcurrido);
@@ -302,20 +288,19 @@ const FocusMode = ({ isOpen, onClose, onComplete, categoriaActual }) => {
               </div>
 
               <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-20'>
-                <div className='flex items-baseline gap-2'>
-                  <span className='text-3xl text-white font-semibold ml-16'>
-                    min
-                  </span>
+                <div className='flex items-baseline gap-3 ml-20'>
+                  <span className='text-3xl text-white font-semibold'>min</span>
                 </div>
               </div>
 
               <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className='h-64 overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative'
+                className='h-64 overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative scroll-smooth'
                 style={{
                   scrollbarWidth: "none",
                   msOverflowStyle: "none",
+                  scrollBehavior: "smooth",
                 }}
               >
                 <div className='h-28'></div>
